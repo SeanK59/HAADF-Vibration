@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAADF Vibration Simulator</title>
+<style>
+:root{
+  --bg:#121212; --panel:#1e1e1e; --accent:#80cbc4; --fg:#e0e0e0; --dim:#9e9e9e;
+  --line:#333; --ok:#a5d6a7; --bad:#ef9a9a; --diff:#ffb74d; --stage:#0b0b0b; --vio:#ce93d8;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);
+     font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{padding:14px 20px 12px;border-bottom:1px solid var(--line)}
+.home-link{font-size:.9rem;margin-bottom:.55rem}
+.home-link a{color:var(--accent);text-decoration:none}
+.home-link a:hover{text-decoration:underline}
+h1{margin:0;font-size:19px;font-weight:600;color:var(--accent);letter-spacing:.2px}
+header .sub{color:var(--dim);font-size:12.5px;margin-top:2px}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;padding:16px 20px 4px;align-items:start}
+@media(max-width:1120px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+@media(max-width:760px){.pair{grid-template-columns:minmax(0,1fr)}}
+/* heading with a right-hand note: flex, not float -- a float wide enough to wrap squeezed the figure below
+   it, since the figure's overflow:hidden makes it avoid floats rather than flow under them */
+.panel h2{display:flex;align-items:baseline;gap:12px}
+.panel h2 .aside{margin-left:auto;text-align:right;color:#7c7c7c;letter-spacing:.3px;text-transform:none;
+                 font-size:10.5px;font-weight:400;min-width:0}
+.fig{position:relative;background:var(--stage);border:1px solid var(--line);border-radius:6px;
+     aspect-ratio:1/1;overflow:hidden}
+.fig canvas,.plotbox canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+.plotbox{position:relative;height:390px;background:var(--stage);border:1px solid var(--line);border-radius:6px}
+.tip{position:absolute;pointer-events:none;background:rgba(18,18,18,.93);border:1px solid #444;border-radius:4px;
+     padding:4px 7px;font:11.5px/1.45 ui-monospace,Consolas,monospace;display:none;white-space:pre;z-index:5}
+.cap{color:#7c7c7c;font-size:11.5px;margin-top:6px;line-height:1.45}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.panel + .panel{margin-top:12px}
+.pair > .panel + .panel{margin-top:0}
+.mainpanels > .panel + .panel, .mainpanels > .pair + .panel{margin-top:12px}
+.panel h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.9px;color:var(--accent);font-weight:600}
+.row{display:grid;grid-template-columns:92px minmax(0,1fr) 70px;gap:7px;align-items:center;margin-bottom:5px}
+.row label{color:var(--dim);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+input[type=range]{width:100%;accent-color:var(--accent);height:16px;margin:0}
+input[type=number]{width:100%;background:#151515;color:var(--fg);border:1px solid var(--line);
+                   border-radius:3px;padding:2px 4px;font:12px/1.3 ui-monospace,Consolas,monospace}
+input[type=number]:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+button{background:#252525;color:var(--fg);border:1px solid var(--line);border-radius:4px;
+       padding:5px 9px;font-size:12.5px;cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button:active{background:#2e2e2e}
+.seg{display:flex;margin-bottom:7px;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{flex:1;margin:0;border:0;border-radius:0;text-align:center;font-size:11.5px;padding:4px 4px;
+            background:#191919;color:var(--dim)}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button.on{background:#2a3a38;color:var(--accent)}
+.seglabel{color:var(--dim);font-size:11.5px;margin:2px 0 3px}
+.chk{display:flex;align-items:center;gap:7px;margin-bottom:5px;color:var(--dim);font-size:12.5px;cursor:pointer}
+.chk input{accent-color:var(--accent);margin:0}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.btns button{flex:1 1 auto}
+.mode{border:1px solid var(--line);border-radius:5px;padding:7px 8px 3px;margin-bottom:8px;background:#1a1a1a}
+.mode.off{opacity:.55}
+.modehead{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
+.modehead .ttl{color:var(--fg);font-weight:600;flex:1}
+.modehead .x{padding:0 7px;line-height:18px;font-size:13px}
+.derived{color:#7c7c7c;font-size:11.5px;margin:3px 0 2px;font-family:ui-monospace,Consolas,monospace;line-height:1.5}
+.tabs{display:flex;gap:0;margin:-2px 0 8px;border:1px solid var(--line);border-radius:4px;overflow:hidden;width:max-content}
+.tabs button{border:0;border-radius:0;background:#191919;color:var(--dim);font-size:11.5px;padding:4px 12px}
+.tabs button + button{border-left:1px solid var(--line)}
+.tabs button.on{background:#2a3a38;color:var(--accent)}
+.plotopts{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px}
+.plotopts .chk{margin:0}
+.swatch{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:2px}
+#readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px 22px}
+.rgroup h3{margin:0 0 3px;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:#7c7c7c;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:1px 0;vertical-align:top}
+th{color:#7c7c7c;font-weight:500;font-size:11px;text-align:right}
+th:first-child{text-align:left}
+td.k{color:var(--dim);padding-right:8px;white-space:nowrap}
+td.v{text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ok{color:var(--ok)} .bad{color:var(--bad)} .dp{color:var(--diff)} .ac{color:var(--accent)}
+.warn{color:var(--bad);font-size:12px;margin-top:8px;line-height:1.5}
+.notice{color:var(--diff);font-size:12px;margin-top:6px;line-height:1.5}
+#status{font-family:ui-monospace,Consolas,monospace}
+#status.busy{color:var(--diff)}
+.legitem{color:var(--dim);font-size:12.5px;display:inline-flex;align-items:center;gap:5px}
+.notes{margin:16px 20px 28px;padding-top:12px;border-top:1px solid var(--line);
+       color:var(--dim);font-size:12.5px;max-width:1100px}
+.notes h3{color:var(--fg);font-size:13px;margin:14px 0 4px}
+.notes code{background:#1c1c1c;padding:1px 4px;border-radius:3px;font-size:12px}
+.notes a{color:var(--accent)}
+#banner{display:none;margin:12px 20px 0;padding:8px 12px;border-radius:5px;
+        font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="home-link"><a href="https://seankung.ca/">&larr; seankung.ca</a></nav>
+  <h1>HAADF Vibration Simulator</h1>
+  <div class="sub">A perfect lattice, a Gaussian probe and real scan timing &middot; the vibration spectrum read
+    back from the FFT satellites the way <code>haadf_vib</code> reads it</div>
+</header>
+
+<div id="banner"></div>
+<!-- Shown until the script starts. If it is still here, scripts are not running (a viewer that shows a
+     static snapshot of local files, or JavaScript switched off), or the script failed before it could start. -->
+<div id="noscriptMsg" style="margin:12px 20px 0;padding:10px 14px;border:1px solid #5a3d3d;border-radius:6px;
+     background:#2a1c1c;color:#ef9a9a;font-size:13px;line-height:1.55">
+  <b>The simulator is not running.</b> Everything on this page is computed by JavaScript in your browser, and it has not
+  started. Open <code>index.html</code> in Chrome, Edge or Firefox (a file viewer or preview pane may show only a
+  static snapshot), or serve the folder and open <code>http://localhost:8124/</code>:
+  <code style="display:block;margin-top:4px">python -m http.server 8124 --directory .</code>
+</div>
+<noscript><style>#noscriptMsg{display:block!important}</style></noscript>
+
+<div class="wrap">
+  <div class="mainpanels">
+    <div class="pair">
+      <div class="panel figpanel">
+        <h2>Simulated HAADF <span class="aside" id="imgAside"></span></h2>
+        <div class="fig" id="imgFig"><canvas id="imgCv"></canvas><div class="tip" id="imgTip"></div></div>
+        <div class="seg" style="margin:8px 0 0" id="imgSeg"></div>
+      </div>
+      <div class="panel figpanel">
+        <h2>FFT, |F| <span class="aside" id="fftAside"></span></h2>
+        <div class="fig" id="fftFig"><canvas id="fftCv"></canvas><div class="tip" id="fftTip"></div></div>
+        <div class="seg" style="margin:8px 0 0" id="zoomSeg"></div>
+        <div class="cap">Circled: the reflections the satellites are read from. Dashed: the columns they are read along.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Vibration <span class="aside" id="status"></span></h2>
+      <div class="tabs" id="plotTabs"></div>
+      <div class="plotbox" id="plotBox"><canvas id="plotCv"></canvas><div class="tip" id="plotTip"></div></div>
+      <div class="plotopts" id="plotOpts"></div>
+      <div class="cap" id="plotCap"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Readout</h2>
+      <div id="readout"></div>
+      <div id="warnings"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Scenarios</h2>
+      <div class="btns" id="scenarios"></div>
+      <div class="cap" id="scenarioNote"></div>
+    </div>
+    <div class="panel">
+      <h2>Lattice &amp; probe</h2>
+      <div id="latticeCtl"></div>
+    </div>
+    <div class="panel">
+      <h2>Vibration modes</h2>
+      <div id="modesCtl"></div>
+      <div class="btns"><button type="button" id="addMode">+ add mode</button></div>
+      <div class="cap">Each mode is a Lorentzian: centre f, full width w, rms amplitude a. A width of 0 is a
+        pure tone of peak a&middot;&radic;2.</div>
+    </div>
+    <div class="panel">
+      <h2>Drift</h2>
+      <div id="driftCtl"></div>
+    </div>
+    <div class="panel">
+      <h2>Scan</h2>
+      <div class="seglabel">pixels (square)</div>
+      <div class="seg" id="pxSeg"></div>
+      <div id="scanCtl"></div>
+      <label class="chk"><input type="checkbox" id="noiseChk"> shot noise</label>
+      <div class="row"><label>seed</label><div class="btns"><button type="button" id="reseed">reseed</button></div>
+        <input type="number" id="seedNum" step="1"></div>
+      <div class="derived" id="scanDerived"></div>
+    </div>
+    <div class="panel">
+      <h2>Actions</h2>
+      <div class="btns">
+        <button type="button" id="resetAll">reset to defaults</button>
+        <button type="button" id="copyLink">copy link to this state</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>What is simulated</h3>
+  <p>A square lattice of constant <i>a</i>, rotated by &theta; relative to the scan, one atom per cell,
+    imaged incoherently with a Gaussian probe of half width at half maximum <i>r</i>. Pixel (i, j) of frame n
+    is recorded at <i>t</i> = n&middot;T<sub>frame</sub> + i&middot;t<sub>line</sub> + (j + &frac12;)&middot;&tau;, with
+    t<sub>line</sub> = M&middot;&tau; + flyback, and it records the lattice at its nominal position minus the
+    specimen displacement at that instant, <b>s</b>(t) = drift + vibration. Nothing else is imposed: the
+    satellites, the loss inside a row, aliasing and the drift shear all come from that timing.</p>
+  <p>Each vibration mode is generated as &xi;(t) = Re[z(t)&middot;e<sup>2&pi;ift</sup>], with z a complex
+    Ornstein&ndash;Uhlenbeck envelope of rate &pi;w. Its one-sided power spectrum is exactly
+    a&sup2;&middot;[L(f&prime;&minus;f) + L(f&prime;+f)], a Lorentzian of full width w and total rms a. Isotropic modes
+    split a between two independent x and y processes. Runs are seeded, so changing one knob does not re-roll
+    the others.</p>
+  <p>Counts are Poisson on the column signal plus a uniform background. The defaults, 75 counts on a
+    background 9&times; that, reproduce a raw single frame of a real crystal scanned at these settings: valley/peak 0.91, mean/&sigma; &asymp; 26,
+    and Bragg/background &asymp; 100&ndash;117 on the strongest reflections read.</p>
+  <h3>How the spectrum is read back</h3>
+  <p>A line-for-line port of <code>vibration.py</code> / <code>haadf_vib.py</code>: Hann-windowed |FFT|;
+    <code>fit_reflections</code> (the strongest Bragg reflections that each have their FFT column to themselves);
+    <code>_sideband_power</code> walks each column, averages the &plusmn;k satellites and removes a background taken
+    from an unrelated column; the satellite/Bragg ratio is Bessel-inverted to the displacement along g;
+    reflections in &ge; 3 directions are fitted for x and y together and reported as &radic;(x&sup2;+y&sup2;);
+    the correction for each row&rsquo;s Hann-weighted time average; power averaged over frames; then
+    <code>reduce_spectrum</code> for the floor, bands and peaks.</p>
+  <h3>The curves</h3>
+  <p><b>set, per bin</b> is the Lorentzian spectrum you dialled in, integrated over each FFT bin and spread by the
+    Hann window&rsquo;s [&frac14;, 1, &frac14;] power kernel &mdash; what an ideal satellite reading would show, drawn
+    past Nyquist too. <b>expected reading</b> is what the scan can actually report: that spectrum after each row&rsquo;s
+    Hann-weighted time average (response &asymp; sinc(x)/(1&minus;x&sup2;), x = f&middot;t<sub>active</sub>), folded at the
+    line rate, then divided by the method&rsquo;s own correction at the frequency it appears at &mdash; below Nyquist
+    that undoes the row average and leaves the set spectrum. <b>extracted</b> is the port
+    of the Python method run on the simulated frames; it should scatter about <i>expected reading</i>.</p>
+  <p>Append <code>?selftest</code> to the address to run the built-in checks.</p>
+</div>
+
+<!-- ======================================================================
+     Simulation + extraction core. Plain text so the same source runs in a
+     Web Worker (via a Blob) and on the main thread (via new Function).
+     ====================================================================== -->
+<script type="text/plain" id="core">
+var SimCore = (function () {
+'use strict';
+
+var DEFAULTS = {
+  a_pm: 500, rot_deg: 15, probe_r_pm: 100,
+  modes: [{on: true, f: 20, w: 2, a: 20, dir: 30, iso: false}],
+  // scan defaults are a real 512^2 acquisition: 31.25 pm/px, 8 us dwell, 32 us flyback -> 4128 us
+  // lines, 242.2 Hz line rate
+  drift_speed: 20, drift_dir: 45,
+  // Noise: real single frames at these settings sit on a pedestal ~9x the lattice modulation (valley/peak
+  // 0.9) with noise nearly independent of level -- which is what shot noise on a large background gives.
+  // Dose 75 lands between the measures of such a frame: mean/sigma 26 (sim 60 -> 23.6, 100 -> 30.5),
+  // (peak - valley)/sigma 2.5, and Bragg/background 100-117 on its strongest reflections.
+  npx: 512, fov_nm: 16, dwell_us: 8, flyback_us: 32, frames: 1, dose: 75, background: 9, noise: true,
+  seed: 1
+};
+
+// haadf_vib's bands: the six ronchi_vib bands plus very-high
+var BANDS = [[0.5, 2.0, 'drift'], [2.0, 6.0, 'suspension'], [6.0, 15.0, 'floor modes'],
+             [15.0, 30.0, 'machinery'], [30.0, 70.0, 'lattice-critical'], [70.0, 125.0, 'high-f'],
+             [125.0, 300.0, 'very-high']];
+var LINE_MIN_PROM = 4.0;
+var Y_COST_WARN = 2.0;
+var ALIAS_F_MAX = 500.0;
+
+// ---------------------------------------------------------------- random numbers
+function mulberry32(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashSeed() {
+  var h = 2166136261 >>> 0;
+  for (var i = 0; i < arguments.length; i++) {
+    var v = Math.floor(arguments[i]) >>> 0;
+    for (var b = 0; b < 4; b++) { h ^= (v >>> (8*b)) & 255; h = Math.imul(h, 16777619) >>> 0; }
+  }
+  return h;
+}
+function makeGauss(rng) {
+  var spare = null;
+  return function () {
+    if (spare !== null) { var s = spare; spare = null; return s; }
+    var u = rng(); while (u <= 1e-300) u = rng();
+    var v = rng(), r = Math.sqrt(-2*Math.log(u));
+    spare = r*Math.sin(2*Math.PI*v);
+    return r*Math.cos(2*Math.PI*v);
+  };
+}
+function poisson(lam, rng, gauss) {
+  if (!(lam > 0)) return 0;
+  if (lam < 30) {
+    var L = Math.exp(-lam), k = 0, p = 1;
+    do { k++; p *= rng(); } while (p > L);
+    return k - 1;
+  }
+  var v = Math.round(lam + Math.sqrt(lam)*gauss());
+  return v < 0 ? 0 : v;
+}
+
+// ---------------------------------------------------------------- numpy-alikes
+function hanning(n) {                       // np.hanning: symmetric
+  var w = new Float64Array(n);
+  if (n === 1) { w[0] = 1; return w; }
+  for (var i = 0; i < n; i++) w[i] = 0.5 - 0.5*Math.cos(2*Math.PI*i/(n - 1));
+  return w;
+}
+function median(arr) {
+  var s = Float64Array.from(arr).sort(), n = s.length;
+  if (!n) return NaN;
+  return n % 2 ? s[(n - 1)/2] : 0.5*(s[n/2 - 1] + s[n/2]);
+}
+function sinc(x) { if (x === 0) return 1; var px = Math.PI*x; return Math.sin(px)/px; }
+function mod(a, n) { return ((a % n) + n) % n; }
+
+// ---------------------------------------------------------------- FFT (radix 2)
+var _plans = {};
+function fftPlan(n) {
+  if (_plans[n]) return _plans[n];
+  var lv = 0; while ((1 << lv) < n) lv++;
+  if ((1 << lv) !== n) throw new Error('FFT size must be a power of two, got ' + n);
+  var rev = new Uint32Array(n);
+  for (var i = 0; i < n; i++) { var r = 0, x = i; for (var b = 0; b < lv; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+  var cs = new Float64Array(n/2), sn = new Float64Array(n/2);
+  for (i = 0; i < n/2; i++) { cs[i] = Math.cos(2*Math.PI*i/n); sn[i] = Math.sin(2*Math.PI*i/n); }
+  return (_plans[n] = {n: n, rev: rev, cs: cs, sn: sn});
+}
+// In place, forward: X_k = sum_n x_n exp(-2 pi i k n / N), numpy's convention.
+function fft1(re, im, plan) {
+  var n = plan.n, rev = plan.rev, cs = plan.cs, sn = plan.sn, i, j, t;
+  for (i = 0; i < n; i++) {
+    j = rev[i];
+    if (j > i) { t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (var size = 2; size <= n; size <<= 1) {
+    var half = size >> 1, step = n/size;
+    for (i = 0; i < n; i += size) {
+      for (var q = 0, k = 0; q < half; q++, k += step) {
+        var a = i + q, b = a + half, c = cs[k], s = sn[k];
+        var tr = re[b]*c + im[b]*s, ti = im[b]*c - re[b]*s;
+        re[b] = re[a] - tr; im[b] = im[a] - ti;
+        re[a] += tr; im[a] += ti;
+      }
+    }
+  }
+}
+function fft2(re, im, N, M) {
+  var pm = fftPlan(M), pn = fftPlan(N), i, j;
+  for (i = 0; i < N; i++) fft1(re.subarray(i*M, i*M + M), im.subarray(i*M, i*M + M), pm);
+  var cr = new Float64Array(N), ci = new Float64Array(N);
+  for (j = 0; j < M; j++) {
+    for (i = 0; i < N; i++) { cr[i] = re[i*M + j]; ci[i] = im[i*M + j]; }
+    fft1(cr, ci, pn);
+    for (i = 0; i < N; i++) { re[i*M + j] = cr[i]; im[i*M + j] = ci[i]; }
+  }
+}
+// |fft2((a - a.mean()) * hanning(N)[:,None] * hanning(M)[None,:])| -- vibration._sideband_power's P
+function windowedMag(a, N, M, wN, wM, work) {
+  var n = N*M, mean = 0, i, j;
+  for (i = 0; i < n; i++) mean += a[i];
+  mean /= n;
+  var re = work.re, im = work.im;
+  for (i = 0; i < N; i++) for (j = 0; j < M; j++) {
+    var q = i*M + j; re[q] = (a[q] - mean)*wN[i]*wM[j]; im[q] = 0;
+  }
+  fft2(re, im, N, M);
+  var P = new Float64Array(n);
+  for (i = 0; i < n; i++) P[i] = Math.sqrt(re[i]*re[i] + im[i]*im[i]);
+  return P;
+}
+
+// ---------------------------------------------------------------- vibration.detect_gs
+function detectGs(P, N, M, n, dcExcl, streakExcl, minSep) {
+  n = n || 4; dcExcl = dcExcl == null ? 5 : dcExcl;
+  streakExcl = streakExcl == null ? 3 : streakExcl; minSep = minSep == null ? 4 : minSep;
+  var Pw = new Float64Array(N*M), i, j, q;
+  for (i = 0; i < N; i++) {
+    var fyN = i < N/2 ? i : i - N;               // np.fft.fftfreq(N)*N
+    for (j = 0; j < M; j++) {
+      var fxM = j < M/2 ? j : j - M;
+      q = i*M + j;
+      Pw[q] = (Math.hypot(fxM, fyN) > dcExcl && fxM >= streakExcl) ? P[q] : 0;
+    }
+  }
+  var out = [], r = Math.ceil(minSep);
+  for (var it = 0; it < n; it++) {
+    var best = -1, bi = 0;
+    for (q = 0; q < N*M; q++) if (Pw[q] > best) { best = Pw[q]; bi = q; }  // first max, as np.argmax
+    if (best <= 0) break;
+    var i0 = (bi/M) | 0, j0 = bi % M;
+    out.push([(j0 < M/2 ? j0 : j0 - M)/M, (i0 < N/2 ? i0 : i0 - N)/N]);
+    for (var di = -r; di <= r; di++) for (var dj = -r; dj <= r; dj++) {
+      if (Math.hypot(di, dj) < minSep) Pw[mod(i0 + di, N)*M + mod(j0 + dj, M)] = 0;
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- vibration.fit_reflections
+var FIT_N_GS = 6, FIT_POOL = 12, COL_TOL = 1, DIR_TOL_DEG = 15.0;
+function fitReflections(P, N, M) {
+  var cand = detectGs(P, N, M, FIT_POOL), keep = [];
+  for (var i = 0; i < cand.length; i++) {
+    var shared = false;
+    for (var q = 0; q < i; q++) if (Math.abs(cand[i][0] - cand[q][0])*M <= COL_TOL) { shared = true; break; }
+    if (shared) continue;
+    keep.push(cand[i]);
+    if (keep.length === FIT_N_GS) break;
+  }
+  return keep;
+}
+function nDirections(gs) {
+  var ang = gs.map(function (g) { return mod(Math.atan2(g[1], g[0])*180/Math.PI, 180); })
+               .sort(function (a, b) { return a - b; });
+  if (!ang.length) return 0;
+  var groups = [[ang[0]]];
+  for (var i = 1; i < ang.length; i++) {
+    var last = groups[groups.length - 1];
+    if (ang[i] - last[last.length - 1] < DIR_TOL_DEG) last.push(ang[i]); else groups.push([ang[i]]);
+  }
+  if (groups.length > 1 && ang[0] + 180 - ang[ang.length - 1] < DIR_TOL_DEG) {
+    groups[0] = groups[0].concat(groups.pop());
+  }
+  return groups.length;
+}
+
+// ---------------------------------------------------------------- lattice._find_reflections (cross-talk flags)
+function findReflections(P, N, M, n, rMin, rMax, sep) {
+  n = n || 18; rMin = rMin || 0.008; rMax = rMax || 0.25; sep = sep || 0.006;
+  var Pw = new Float64Array(N*M), i, j, q;
+  var fxOf = function (j) { return (j > M/2 ? j - M : j)/M; }, fyOf = function (i) { return (i > N/2 ? i - N : i)/N; };
+  for (i = 0; i < N; i++) for (j = 0; j < M; j++) {
+    var fx = fxOf(j), fy = fyOf(i), rr = Math.hypot(fy, fx);
+    q = i*M + j; Pw[q] = (rr > rMin && rr < rMax && fx >= 0) ? P[q] : 0;
+  }
+  var out = [], R = Math.ceil(sep*Math.max(N, M)) + 1;
+  for (var it = 0; it < n; it++) {
+    var best = -1, bi = 0;
+    for (q = 0; q < N*M; q++) if (Pw[q] > best) { best = Pw[q]; bi = q; }
+    if (best <= 0) break;
+    var i0 = (bi/M) | 0, j0 = bi % M, fx0 = fxOf(j0), fy0 = fyOf(i0);
+    out.push([fx0, fy0, P[bi]]);
+    for (var di = -R; di <= R; di++) for (var dj = -R; dj <= R; dj++) {
+      var ii = i0 + di, jj = j0 + dj;
+      if (ii < 0 || ii >= N || jj < 0 || jj >= M) continue;
+      if (Math.hypot(fxOf(jj) - fx0, fyOf(ii) - fy0) < sep) Pw[ii*M + jj] = 0;
+    }
+  }
+  return out;
+}
+// haadf_vib._crosstalk_from_reflections(img, fs, gs)
+function crosstalkHz(gs, refl, N, M, fs) {
+  var out = {};
+  gs.forEach(function (g) {
+    refl.forEach(function (r) {
+      if (Math.abs(r[0] - g[0])*M <= 1 && Math.abs(r[1] - g[1])*N >= 0.5) {
+        var v = Math.round(Math.abs(r[1] - g[1])*fs*1000)/1000; out[v] = true;
+      }
+    });
+  });
+  return Object.keys(out).map(Number).sort(function (a, b) { return a - b; });
+}
+
+// ---------------------------------------------------------------- vibration._sideband_power
+function sidebandPower(P, N, M, gs) {
+  var K = (N >> 1) - 1, k = new Float64Array(K);
+  for (var q = 0; q < K; q++) k[q] = q + 1;
+  var rows = gs.map(function (g) {
+    var ix = mod(Math.round(g[0]*M), M), iy = mod(Math.round(g[1]*N), N);
+    var jb = (ix + Math.floor(M/3)) % M, bgc = new Float64Array(N), i;
+    for (i = 0; i < N; i++) bgc[i] = P[i*M + jb];
+    var side = new Float64Array(K);
+    for (var q2 = 0; q2 < K; q2++) {
+      var kk = q2 + 1;
+      side[q2] = 0.5*(P[((iy + kk) % N)*M + ix] + P[mod(iy - kk, N)*M + ix]);
+    }
+    return {gx: g[0], carrier: P[iy*M + ix], bg: median(bgc), side: side};
+  });
+  return {k: k, rows: rows};
+}
+
+// ---------------------------------------------------------------- vibration._invert_bessel_ratio
+var B_MAX = 2.30, _bes = null;
+function besselJ(nu, x) {                  // power series; plenty for 0 <= x <= 2.3
+  var h = x/2, term = nu === 0 ? 1 : h, sum = term;
+  for (var m = 1; m < 60; m++) {
+    term *= -h*h/(m*(m + nu)); sum += term;
+    if (Math.abs(term) < 1e-18*Math.abs(sum)) break;
+  }
+  return sum;
+}
+function besselTable() {
+  if (_bes) return _bes;
+  var n = 4001, b = new Float64Array(n), r = new Float64Array(n);
+  for (var i = 0; i < n; i++) { b[i] = i*(B_MAX/(n - 1)); r[i] = besselJ(1, b[i])/besselJ(0, b[i]); }
+  return (_bes = {b: b, r: r});
+}
+function invertBesselRatio(ratio) {         // np.interp(ratio, j1/j0, b)
+  var t = besselTable(), r = t.r, b = t.b, n = r.length;
+  if (!(ratio > r[0])) return b[0];
+  if (ratio >= r[n - 1]) return b[n - 1];
+  var lo = 0, hi = n - 1;
+  while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (r[mid] <= ratio) lo = mid; else hi = mid; }
+  return b[lo] + (b[hi] - b[lo])*(ratio - r[lo])/(r[hi] - r[lo]);
+}
+
+// ---------------------------------------------------------------- vibration._x_only / _tensor
+// vibration._row_response: the row's Hann-weighted average (was sinc(f t_active) before 2026-09-11)
+function rowResponse(f, tA, M) { return hannRespD(f, tA/M, M); }
+function xOnly(N, k, rows, fs, tA, kMin, M) {
+  var K = k.length, num = new Float64Array(K), den = 0;
+  rows.forEach(function (row) {
+    var wgt = (row.carrier*row.gx)*(row.carrier*row.gx);
+    for (var q = 0; q < K; q++) {
+      var amp = Math.sqrt(Math.max(row.side[q]*row.side[q] - row.bg*row.bg, 0));
+      var b = invertBesselRatio(amp/row.carrier);
+      num[q] += wgt*b/(2*Math.PI*Math.abs(row.gx));
+    }
+    den += wgt;
+  });
+  var f = [], u = [];
+  for (var q = 0; q < K; q++) {
+    if (k[q] < kMin) continue;
+    var fq = k[q]/N*fs, uq = num[q]/den;
+    if (tA) uq /= Math.max(rowResponse(fq, tA, M), 0.25);
+    f.push(fq); u.push(uq);
+  }
+  return {f: Float64Array.from(f), u: Float64Array.from(u)};
+}
+function solve3(A, bvec) {                  // Gaussian elimination, partial pivoting
+  var a = A.map(function (r, i) { return r.concat([bvec[i]]); }), i, j, c;
+  for (c = 0; c < 3; c++) {
+    var p = c;
+    for (i = c + 1; i < 3; i++) if (Math.abs(a[i][c]) > Math.abs(a[p][c])) p = i;
+    var t = a[c]; a[c] = a[p]; a[p] = t;
+    for (i = c + 1; i < 3; i++) { var fct = a[i][c]/a[c][c]; for (j = c; j < 4; j++) a[i][j] -= fct*a[c][j]; }
+  }
+  var x = [0, 0, 0];
+  for (i = 2; i >= 0; i--) { var s = a[i][3]; for (j = i + 1; j < 3; j++) s -= a[i][j]*x[j]; x[i] = s/a[i][i]; }
+  return x;
+}
+function tensor(N, k, rows, gs, fs, tA, kMin, M) {
+  var n = rows.length, K = k.length;
+  var X = gs.map(function (g) { return [g[0]*g[0], g[1]*g[1], 2*g[0]*g[1]]; });
+  var w = rows.map(function (r) { var d = r.carrier/Math.max(r.bg, 1e-12*r.carrier); return d*d*d*d; });
+  var A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], i, a, b, q;
+  for (i = 0; i < n; i++) for (a = 0; a < 3; a++) for (b = 0; b < 3; b++) A[a][b] += w[i]*X[i][a]*X[i][b];
+  // columns of A^-1, so each frequency is three dot products
+  var Ainv = [solve3(A, [1, 0, 0]), solve3(A, [0, 1, 0]), solve3(A, [0, 0, 1])];
+  var m = rows.map(function (row) {
+    var mm = new Float64Array(K);
+    for (var q2 = 0; q2 < K; q2++) {
+      var amp = Math.sqrt(Math.max(row.side[q2]*row.side[q2] - row.bg*row.bg, 0));
+      var bb = invertBesselRatio(amp/row.carrier)/(2*Math.PI);
+      mm[q2] = bb*bb;
+    }
+    return mm;
+  });
+  var f = [], S = [];
+  for (q = 0; q < K; q++) {
+    if (k[q] < kMin) continue;
+    var rhs = [0, 0, 0];
+    for (i = 0; i < n; i++) for (a = 0; a < 3; a++) rhs[a] += w[i]*X[i][a]*m[i][q];
+    var s = [0, 0, 0];
+    for (a = 0; a < 3; a++) s[a] = Ainv[0][a]*rhs[0] + Ainv[1][a]*rhs[1] + Ainv[2][a]*rhs[2];
+    var fq = k[q]/N*fs;
+    if (tA) { var c = Math.max(rowResponse(fq, tA, M), 0.25); s[0] /= c*c; s[1] /= c*c; s[2] /= c*c; }
+    f.push(fq); S.push(s);
+  }
+  return {f: Float64Array.from(f), S: S};
+}
+
+// ---------------------------------------------------------------- vibration.sequence_spectrum, one frame at a time
+function SpecAcc(N, M, gs, fs, tA) {
+  this.N = N; this.M = M; this.gs = gs; this.fs = fs; this.tA = tA;
+  this.ndir = nDirections(gs); this.twoD = this.ndir >= 3; this.n = 0;
+  this.f = null; this.accU = null; this.accS = null;
+}
+SpecAcc.prototype.add = function (P) {
+  var sp = sidebandPower(P, this.N, this.M, this.gs), q;
+  var xo = xOnly(this.N, sp.k, sp.rows, this.fs, this.tA, 3, this.M);
+  if (!this.accU) this.accU = new Float64Array(xo.u.length);
+  for (q = 0; q < xo.u.length; q++) this.accU[q] += xo.u[q]*xo.u[q];
+  this.f = xo.f;
+  if (this.twoD) {
+    var te = tensor(this.N, sp.k, sp.rows, this.gs, this.fs, this.tA, 3, this.M);
+    if (!this.accS) this.accS = [new Float64Array(te.S.length), new Float64Array(te.S.length), new Float64Array(te.S.length)];
+    for (q = 0; q < te.S.length; q++) { this.accS[0][q] += te.S[q][0]; this.accS[1][q] += te.S[q][1]; this.accS[2][q] += te.S[q][2]; }
+  }
+  this.n++;
+};
+SpecAcc.prototype.result = function (pxPm) {
+  var n = this.n, K = this.f.length, q;
+  var ampXO = new Float64Array(K);
+  for (q = 0; q < K; q++) ampXO[q] = Math.sqrt(this.accU[q]/n)*pxPm;
+  var out = {f: this.f, n_directions: this.ndir, amp_x_only: ampXO};
+  if (this.twoD) {
+    var amp = new Float64Array(K), ax = new Float64Array(K), ay = new Float64Array(K), cxy = new Float64Array(K);
+    for (q = 0; q < K; q++) {
+      var sxx = this.accS[0][q]/n, syy = this.accS[1][q]/n, sxy = this.accS[2][q]/n;
+      amp[q] = Math.sqrt(Math.max(sxx + syy, 0))*pxPm;
+      ax[q] = Math.sqrt(Math.max(sxx, 0))*pxPm; ay[q] = Math.sqrt(Math.max(syy, 0))*pxPm;
+      cxy[q] = sxy*pxPm*pxPm;
+    }
+    out.motion = 'x+y'; out.amp = amp; out.amp_x = ax; out.amp_y = ay; out.cov_xy = cxy;
+  } else {
+    out.motion = 'x only'; out.amp = ampXO; out.amp_x = ampXO; out.amp_y = null; out.cov_xy = null;
+  }
+  out.floor_pm = median(out.amp); out.floor_x_only_pm = median(ampXO);
+  out.y_cost = out.floor_x_only_pm > 0 ? out.floor_pm/out.floor_x_only_pm : null;
+  return out;
+};
+
+// ---------------------------------------------------------------- ronchi_vib.reduce_spectrum
+function windowNpb(n) {
+  var w = hanning(n), s1 = 0, s2 = 0;
+  for (var i = 0; i < n; i++) { s1 += w[i]; s2 += w[i]*w[i]; }
+  return n*s2/(s1*s1);
+}
+function reduceSpectrum(f, amp, fs, npbN, bands, lineMinProm, fMin, lineFMin) {
+  bands = bands || BANDS; lineMinProm = lineMinProm == null ? LINE_MIN_PROM : lineMinProm;
+  fMin = fMin == null ? 0.5 : fMin; lineFMin = lineFMin == null ? 1.0 : lineFMin;
+  var nyq = fs/2, K = f.length, q, inb = [];
+  for (q = 0; q < K; q++) if (f[q] > fMin && f[q] <= nyq) inb.push(amp[q]);
+  var floor = median(inb), bandCorr = 1/Math.sqrt(windowNpb(npbN));
+  var out = {}, covered = {};
+  bands.forEach(function (bd) {
+    var lo = bd[0], hi = bd[1], s = 0, cnt = 0;
+    for (var q2 = 0; q2 < K; q2++) if (f[q2] >= lo && f[q2] < Math.min(hi, nyq)) {
+      s += Math.max(amp[q2]*amp[q2] - floor*floor, 0); cnt++;
+    }
+    var ok = cnt > 3 && hi <= nyq*1.001;
+    covered[bd[2]] = ok; out[bd[2]] = ok ? Math.sqrt(s/2)*bandCorr : null;
+  });
+  var lines = [];
+  for (q = 1; q < K - 1; q++) {
+    if (amp[q] > amp[q - 1] && amp[q] > amp[q + 1] && f[q] > lineFMin && f[q] < nyq*0.98) {
+      lines.push([f[q], amp[q], amp[q]/floor]);
+    }
+  }
+  lines.sort(function (a, b) { return b[2] - a[2]; });
+  lines = lines.filter(function (l) { return l[2] >= lineMinProm; }).slice(0, 6);
+  var rs = 0; for (q = 0; q < K; q++) if (f[q] > fMin && f[q] <= nyq) rs += amp[q]*amp[q];
+  return {nyquist: nyq, floor: floor, band_corr: bandCorr, rms: Math.sqrt(rs/2)*bandCorr,
+          bands: out, covered: covered, lines: lines};
+}
+function velocityBands(f, amp, floor, nyq, bandCorr, bands) {
+  var out = {};
+  (bands || BANDS).forEach(function (bd) {
+    var lo = bd[0], hi = bd[1], s = 0, cnt = 0;
+    for (var q = 0; q < f.length; q++) if (f[q] >= lo && f[q] < Math.min(hi, nyq)) {
+      var ex = Math.max(amp[q]*amp[q] - floor*floor, 0), w = 2*Math.PI*f[q]*1e-3;
+      s += w*w*ex; cnt++;
+    }
+    out[bd[2]] = (cnt > 3 && hi <= nyq*1.001) ? Math.sqrt(s/2)*bandCorr : null;
+  });
+  return out;
+}
+function aliasCandidates(fObs, fs, fMax) {
+  fMax = fMax || ALIAS_F_MAX;
+  var out = [], k = 0;
+  while (k*fs - fObs <= fMax) {
+    [k*fs - fObs, k*fs + fObs].forEach(function (c) {
+      if (c > 0 && c <= fMax && !out.some(function (x) { return Math.abs(c - x) < 1e-6; })) out.push(c);
+    });
+    k++; if (k > 1000) break;
+  }
+  return out.sort(function (a, b) { return a - b; });
+}
+
+// ---------------------------------------------------------------- the set spectrum
+function lorCdf(x, w) { return w > 0 ? Math.atan(2*x/w)/Math.PI : (x > 0 ? 0.5 : (x < 0 ? -0.5 : 0)); }
+// Power in amp^2 units (a tone of peak A carries A^2) between f1 >= 0 and f2, i.e.
+// 2 * integral of the one-sided PSD a^2 [L(f - f0) + L(f + f0)].
+function bandPower(modes, f1, f2) {
+  var s = 0;
+  modes.forEach(function (m) {
+    s += m.a*m.a*(lorCdf(f2 - m.f, m.w) - lorCdf(f1 - m.f, m.w) + lorCdf(f2 + m.f, m.w) - lorCdf(f1 + m.f, m.w));
+  });
+  return 2*s;
+}
+// Response of a Hann-weighted average over a window T at frequency f, x = f T (continuous form).
+function hannResp(x) { var d = 1 - x*x; return Math.abs(d) < 1e-9 ? 0.5 : Math.abs(sinc(x)/d); }
+// The exact one: |sum_j w_j exp(2 pi i f tau j)| / sum_j w_j for np.hanning(M) over pixels tau apart,
+// which is how a row enters the column read by the satellite method. Closed form from three
+// Dirichlet kernels; within a few 1e-3 of hannResp(f M tau) except close to x = 1.
+function dirichlet(th, M) {
+  var s = Math.sin(th/2);
+  return Math.abs(s) < 1e-12 ? M*Math.cos(M*th/2)/Math.cos(th/2) : Math.sin(M*th/2)/s;
+}
+function hannRespD(f, tau, M) {
+  var th = 2*Math.PI*f*tau, ph = 2*Math.PI/(M - 1);
+  return Math.abs(0.5*dirichlet(th, M) + 0.25*dirichlet(th - ph, M) + 0.25*dirichlet(th + ph, M))/((M - 1)/2);
+}
+function activeModes(modes) {
+  return (modes || []).filter(function (m) { return m.on && m.a > 0; })
+    .map(function (m) { return {f: Math.max(0, +m.f), w: Math.max(0, +m.w), a: +m.a}; });
+}
+function setCurves(modes, fs, N, tA, fPlotMax, tau, M) {
+  var act = activeModes(modes), df = fs/N, j, k;
+  var binP = function (jj) { return jj < 0 ? 0 : bandPower(act, Math.max(0, (jj - 0.5)*df), (jj + 0.5)*df); };
+  var Kt = Math.ceil(fPlotMax/df) + 2, pt = new Float64Array(Kt + 2);
+  for (j = 0; j < Kt + 2; j++) pt[j] = binP(j);
+  var fT = new Float64Array(Kt - 1), aT = new Float64Array(Kt - 1);
+  for (k = 1; k < Kt; k++) { fT[k - 1] = k*df; aT[k - 1] = Math.sqrt(0.25*pt[k - 1] + pt[k] + 0.25*pt[k + 1]); }
+  // what the scan reports: row average (Hann-weighted) at the true f, fold, the code's correction at the observed f
+  var fMax = 0; act.forEach(function (m) { fMax = Math.max(fMax, m.f + 200*m.w); });
+  var J = Math.min(Math.max(Math.ceil(fMax/df) + 40, N), 64*N), H = N >> 1;
+  var po = new Float64Array(H + 1);
+  for (j = 1; j <= J; j++) {
+    var hr = hannRespD(j*df, tau, M), jm = j % N, ko = jm > H ? N - jm : jm;
+    po[ko] += binP(j)*hr*hr;
+  }
+  for (k = 0; k <= H; k++) { var c = Math.max(hannRespD(k*df, tau, M), 0.25); po[k] /= c*c; }
+  var fE = [], aE = [];
+  for (k = 3; k < H; k++) {
+    var pe = 0.25*po[k - 1] + po[k] + 0.25*po[k + 1];
+    fE.push(k*df); aE.push(Math.sqrt(pe));
+  }
+  var bandsSet = {};
+  BANDS.forEach(function (bd) { bandsSet[bd[2]] = Math.sqrt(bandPower(act, bd[0], bd[1])/2); });
+  var tot = 0; act.forEach(function (m) { tot += m.a*m.a; });
+  return {fTrue: fT, aTrue: aT, fExp: Float64Array.from(fE), aExp: Float64Array.from(aE),
+          bands: bandsSet, rmsInband: Math.sqrt(bandPower(act, 0.5, fs/2)/2), rmsTotal: Math.sqrt(tot)};
+}
+
+// ---------------------------------------------------------------- the specimen and the motion
+function makeLattice(a, sig) {
+  var K = 4096, tab = new Float64Array(K + 1), nMax = Math.ceil(6*sig/a) + 1;
+  for (var i = 0; i <= K; i++) {
+    var u = a*i/K, s = 0;
+    for (var n = -nMax; n <= nMax + 1; n++) { var d = u - n*a; s += Math.exp(-d*d/(2*sig*sig)); }
+    tab[i] = s;
+  }
+  var peak = tab[0], invA = 1/a;
+  return {tab: tab, K: K, invA: invA, peak: peak};
+}
+// One process per mode (two for an isotropic mode). z is a complex OU envelope, sampled on a grid
+// fine enough that it barely moves between samples, and interpolated at every pixel time.
+function makeProcesses(modes, seed, tTot) {
+  var out = [];
+  (modes || []).forEach(function (m, idx) {
+    if (!m.on || !(m.a > 0)) return;
+    var dir = (+m.dir || 0)*Math.PI/180;
+    var axes = m.iso ? [[1, 0, m.a/Math.SQRT2, 1], [0, 1, m.a/Math.SQRT2, 2]]
+                     : [[Math.cos(dir), Math.sin(dir), +m.a, 0]];
+    axes.forEach(function (ax) {
+      var rng = mulberry32(hashSeed(seed, idx, ax[3], 17)), g = makeGauss(rng), A = ax[2];
+      var gamma = Math.PI*Math.max(0, +m.w);
+      var h = gamma > 0 ? Math.max(0.02/gamma, tTot/4e6) : tTot;
+      var n = Math.ceil(tTot/h) + 3, re = new Float64Array(n), im = new Float64Array(n);
+      var ph = 2*Math.PI*rng();
+      re[0] = Math.SQRT2*A*Math.cos(ph); im[0] = Math.SQRT2*A*Math.sin(ph);
+      var rho = Math.exp(-gamma*h), qn = Math.sqrt(Math.max(0, 1 - rho*rho))*A;
+      for (var k = 1; k < n; k++) { re[k] = rho*re[k - 1] + qn*g(); im[k] = rho*im[k - 1] + qn*g(); }
+      out.push({f: Math.max(0, +m.f), ex: ax[0], ey: ax[1], re: re, im: im, invH: 1/h, c: 1, s: 0, dc: 1, ds: 0});
+    });
+  });
+  return out;
+}
+
+function now() { return (typeof performance !== 'undefined' ? performance.now() : Date.now()); }
+
+// ---------------------------------------------------------------- the whole run
+function simulate(p, progress, opts) {
+  opts = opts || {};
+  var T0 = now();
+  var N = p.npx | 0, M = N;
+  var pxPm = p.fov_nm*1000/M;
+  var tau = p.dwell_us*1e-6, tFly = Math.max(0, p.flyback_us)*1e-6;
+  var tLine = M*tau + tFly, fs = 1/tLine, tFrame = N*tLine;
+  var nFr = Math.max(1, p.frames | 0), tTot = nFr*tFrame, tA = M*tau;
+  var lat = makeLattice(p.a_pm, p.probe_r_pm/Math.sqrt(2*Math.LN2));
+  var tab = lat.tab, K = lat.K, invA = lat.invA, invPk = 1/(lat.peak*lat.peak);
+  var th = p.rot_deg*Math.PI/180, cR = Math.cos(th), sR = Math.sin(th);
+  var procs = makeProcesses(p.modes, p.seed, tTot), nP = procs.length;
+  procs.forEach(function (q) { q.dc = Math.cos(2*Math.PI*q.f*tau); q.ds = Math.sin(2*Math.PI*q.f*tau); });
+  var dd = (p.drift_dir || 0)*Math.PI/180, vx = p.drift_speed*Math.cos(dd), vy = p.drift_speed*Math.sin(dd);
+  var nrng = mulberry32(hashSeed(p.seed, 424242)), ngau = makeGauss(nrng);
+  var noise = !!p.noise, dose = Math.max(1e-6, +p.dose), bgl = Math.max(0, +p.background || 0);
+  var look = function (u) {
+    var v = u*invA; v -= Math.floor(v);
+    var x = v*K, i0 = x | 0, fr = x - i0;
+    return tab[i0] + (tab[i0 + 1] - tab[i0])*fr;
+  };
+  var wN = hanning(N), wM = wN;
+  var work = {re: new Float64Array(N*M), im: new Float64Array(N*M)};
+  var img = new Float64Array(N*M), img0 = new Float32Array(N*M), imgAvg = new Float32Array(N*M);
+  var pw = new Float64Array(N*M);
+  var stride = Math.max(1, Math.floor(N*M/6000)), trT = [], trX = [], trY = [];
+  var gs = null, acc = null, refl = null, P0 = null, frames = opts.keepFrames ? [] : null;
+  var tGen = 0, tAna = 0;
+
+  for (var fr = 0; fr < nFr; fr++) {
+    var ta = now();
+    for (var i = 0; i < N; i++) {
+      var tRow = fr*tFrame + i*tLine, t1 = tRow + 0.5*tau, qq;
+      for (qq = 0; qq < nP; qq++) {
+        var pr = procs[qq], ph = 2*Math.PI*pr.f*t1;
+        pr.c = Math.cos(ph); pr.s = Math.sin(ph);
+      }
+      var Y0 = i*pxPm;
+      for (var j = 0; j < M; j++) {
+        var t = t1 + j*tau, sx = vx*t, sy = vy*t, vxs = 0, vys = 0;
+        for (qq = 0; qq < nP; qq++) {
+          var q = procs[qq], pos = t*q.invH, k0 = Math.floor(pos), fk = pos - k0;
+          var zr = q.re[k0] + (q.re[k0 + 1] - q.re[k0])*fk, zi = q.im[k0] + (q.im[k0 + 1] - q.im[k0])*fk;
+          var xi = zr*q.c - zi*q.s;
+          vxs += q.ex*xi; vys += q.ey*xi;
+          var c2 = q.c*q.dc - q.s*q.ds; q.s = q.s*q.dc + q.c*q.ds; q.c = c2;
+        }
+        sx += vxs; sy += vys;
+        var X = j*pxPm - sx, Yv = Y0 - sy;
+        var I = (look(cR*X + sR*Yv)*look(-sR*X + cR*Yv)*invPk + bgl)*dose;
+        img[i*M + j] = noise ? poisson(I, nrng, ngau) : I;
+        if (fr === 0 && ((i*M + j) % stride === 0)) { trT.push((t - t1 + i*tLine)*1e3); trX.push(vxs); trY.push(vys); }
+      }
+    }
+    var tb = now(); tGen += tb - ta;
+    var P = windowedMag(img, N, M, wN, wM, work);
+    if (fr === 0) {
+      gs = fitReflections(P, N, M);
+      if (!gs.length) throw new Error('No lattice reflections found in the FFT. The lattice may be finer than the pixels ' +
+                                      '(a < 2 px) or coarser than the field of view.');
+      refl = findReflections(P, N, M);
+      acc = new SpecAcc(N, M, gs, fs, tA);
+      P0 = P;
+      for (var q0 = 0; q0 < N*M; q0++) img0[q0] = img[q0];
+    }
+    acc.add(P);
+    for (var q1 = 0; q1 < N*M; q1++) { pw[q1] += P[q1]*P[q1]; imgAvg[q1] += img[q1]/nFr; }
+    if (frames) frames.push(Float64Array.from(img));
+    tAna += now() - tb;
+    if (progress) progress((fr + 1)/nFr, 'frame ' + (fr + 1) + ' of ' + nFr);
+  }
+
+  var sp = acc.result(pxPm);
+  var red = reduceSpectrum(sp.f, sp.amp, fs, N);
+  var vel = velocityBands(sp.f, sp.amp, red.floor, red.nyquist, red.band_corr);
+  var maxModeF = 0; activeModes(p.modes).forEach(function (m) { maxModeF = Math.max(maxModeF, m.f + 3*m.w); });
+  var fPlotMax = Math.max(fs/2*1.3, Math.min(4*fs, maxModeF*1.5));
+  var set = setCurves(p.modes, fs, N, tA, fPlotMax, tau, M);
+
+  // fftshifted log10 of the frame-averaged power, for display
+  var fftLog = new Float32Array(N*M), H2 = N >> 1, W2 = M >> 1;
+  for (i = 0; i < N; i++) for (j = 0; j < M; j++) {
+    fftLog[((i + H2) % N)*M + ((j + W2) % M)] = Math.log10(pw[i*M + j]/nFr + 1e-30)/2;
+  }
+  var rows0 = sidebandPower(P0, N, M, gs).rows;           // Bragg / background, frame 1
+  var gsInfo = gs.map(function (g, gi) {
+    var gxp = g[0]/pxPm, gyp = g[1]/pxPm;                // cycles per pm
+    var h = p.a_pm*(gxp*cR + gyp*sR), kk = p.a_pm*(-gxp*sR + gyp*cR);
+    var ix = mod(Math.round(g[0]*M), M), iy = mod(Math.round(g[1]*N), N);
+    return {gx: g[0], gy: g[1], kx: g[0]*M, ky: g[1]*N, h: Math.round(h), k: Math.round(kk),
+            ang: Math.atan2(g[1], g[0])*180/Math.PI, gpm: Math.hypot(gxp, gyp), A: P0[iy*M + ix],
+            snr: rows0[gi].carrier/Math.max(rows0[gi].bg, 1e-300)};
+  });
+  return {
+    N: N, M: M, pxPm: pxPm, fs: fs, nyq: fs/2, df: fs/N, tActive: tA, tLine: tLine, tFrame: tFrame,
+    nFrames: nFr, params: p,
+    img0: img0, imgAvg: imgAvg, fftLog: fftLog,
+    gs: gsInfo, motion: sp.motion, n_directions: sp.n_directions, y_cost: sp.y_cost,
+    f: sp.f, amp: sp.amp, amp_x_only: sp.amp_x_only, amp_x: sp.amp_x, amp_y: sp.amp_y, cov_xy: sp.cov_xy,
+    floor_pm: sp.floor_pm, floor_x_only_pm: sp.floor_x_only_pm,
+    reduce: red, vel: vel, crosstalk: crosstalkHz(gs, refl, N, M, fs),
+    set: set,
+    trace: {t: Float32Array.from(trT), x: Float32Array.from(trX), y: Float32Array.from(trY)},
+    frames: frames,
+    timing: {gen: tGen, ana: tAna, total: now() - T0}
+  };
+}
+function transferList(res) {
+  var out = [];
+  [res.img0, res.imgAvg, res.fftLog, res.trace.t, res.trace.x, res.trace.y].forEach(function (a) { if (a) out.push(a.buffer); });
+  return out;
+}
+
+return {DEFAULTS: DEFAULTS, BANDS: BANDS, LINE_MIN_PROM: LINE_MIN_PROM, Y_COST_WARN: Y_COST_WARN,
+        simulate: simulate, transferList: transferList, aliasCandidates: aliasCandidates,
+        fft1: fft1, fftPlan: fftPlan, besselJ: besselJ, invertBesselRatio: invertBesselRatio,
+        makeProcesses: makeProcesses, bandPower: bandPower, hannResp: hannResp, hannRespD: hannRespD, sinc: sinc,
+        nDirections: nDirections, hanning: hanning};
+})();
+</script>
+
+<script type="text/plain" id="workerGlue">
+self.onmessage = function (e) {
+  var d = e.data;
+  try {
+    var res = SimCore.simulate(d.params, function (frac, msg) {
+      self.postMessage({type: 'progress', id: d.id, frac: frac, msg: msg});
+    });
+    self.postMessage({type: 'done', id: d.id, res: res}, SimCore.transferList(res));
+  } catch (err) {
+    self.postMessage({type: 'error', id: d.id, msg: String((err && err.stack) || err)});
+  }
+};
+</script>
+
+<script>
+(function () {
+'use strict';
+const CORE_SRC = document.getElementById('core').textContent;
+const SimCore = new Function(CORE_SRC + '\n;return SimCore;')();
+const DEFAULTS = SimCore.DEFAULTS;
+const $ = id => document.getElementById(id);
+const clone = o => JSON.parse(JSON.stringify(o));
+
+/* ================================================================
+   1.  State (kept in the URL hash, so a link reproduces the run)
+   ================================================================ */
+function loadState() {
+  let s = clone(DEFAULTS);
+  try {
+    if (location.hash.length > 1) {
+      const h = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+      for (const k of Object.keys(DEFAULTS)) if (h[k] !== undefined) s[k] = h[k];
+      if (h.background === undefined) s.background = 0;       // links made before the background existed
+      if (!Array.isArray(s.modes)) s.modes = clone(DEFAULTS.modes);
+      s.modes = s.modes.map(m => Object.assign({on: true, f: 20, w: 2, a: 20, dir: 0, iso: false}, m));
+    }
+  } catch (e) { s = clone(DEFAULTS); }
+  if (![128, 256, 512, 1024].includes(s.npx)) s.npx = DEFAULTS.npx;
+  return s;
+}
+let P = loadState();
+function saveState() {
+  try { history.replaceState(null, '', location.pathname + location.search + '#' + encodeURIComponent(JSON.stringify(P))); }
+  catch (e) { /* file:// in some browsers */ }
+}
+const ui = {imgMode: 'frame', zoom: 2, tab: 'spec', showXO: false, showExp: true, showFloor: true, linF: true};
+
+/* ================================================================
+   2.  Controls
+   ================================================================ */
+const refreshers = [];
+const fmtNum = (v, dig) => {
+  if (!isFinite(v)) return '';
+  if (dig != null) return (+v.toFixed(dig)).toString();
+  const a = Math.abs(v);
+  return a >= 100 ? (+v.toFixed(1)).toString() : a >= 1 ? (+v.toFixed(3)).toString() : (+v.toPrecision(3)).toString();
+};
+function addRow(parent, cfg) {
+  const row = document.createElement('div'); row.className = 'row';
+  const lab = document.createElement('label'); lab.innerHTML = cfg.label; if (cfg.title) lab.title = cfg.title;
+  const rng = document.createElement('input'); rng.type = 'range'; rng.min = 0; rng.max = 1000; rng.step = 1;
+  const num = document.createElement('input'); num.type = 'number'; num.step = 'any';
+  row.append(lab, rng, num); parent.appendChild(row);
+  const lo = cfg.min, hi = cfg.max, hmin = cfg.hmin != null ? cfg.hmin : lo, hmax = cfg.hmax != null ? cfg.hmax : hi;
+  const toS = v => cfg.log ? 1000*Math.log(v/lo)/Math.log(hi/lo) : 1000*(v - lo)/(hi - lo);
+  const fromS = s => cfg.log ? lo*Math.pow(hi/lo, s/1000) : lo + (hi - lo)*s/1000;
+  const snap = v => {
+    if (cfg.int) return Math.round(v);
+    if (cfg.step) return +(Math.round(v/cfg.step)*cfg.step).toFixed(6);
+    return +v.toPrecision(3);
+  };
+  const show = () => { const v = cfg.get(); rng.value = Math.max(0, Math.min(1000, toS(v))); num.value = fmtNum(v, cfg.dig); };
+  rng.addEventListener('input', () => { cfg.set(snap(fromS(+rng.value))); num.value = fmtNum(cfg.get(), cfg.dig); changed(); });
+  num.addEventListener('change', () => {
+    const v = parseFloat(num.value);
+    if (isFinite(v)) cfg.set(cfg.int ? Math.round(Math.min(hmax, Math.max(hmin, v))) : Math.min(hmax, Math.max(hmin, v)));
+    show(); changed();
+  });
+  refreshers.push(show); show();
+  return row;
+}
+function seg(container, items, get, set) {
+  container.innerHTML = '';
+  const btns = items.map(([val, label]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    b.addEventListener('click', () => { set(val); paint(); });
+    container.appendChild(b); return [val, b];
+  });
+  const paint = () => btns.forEach(([v, b]) => b.classList.toggle('on', v === get()));
+  refreshers.push(paint); paint();
+}
+function chk(container, label, get, set, color) {
+  const l = document.createElement('label'); l.className = 'chk';
+  const c = document.createElement('input'); c.type = 'checkbox';
+  l.appendChild(c);
+  const s = document.createElement('span');
+  s.innerHTML = (color ? '<span class="swatch" style="border-color:' + color + (color.dash ? ';border-top-style:dashed' : '') + '"></span>' : '') + label;
+  l.appendChild(s); container.appendChild(l);
+  c.addEventListener('change', () => { set(c.checked); });
+  refreshers.push(() => { c.checked = !!get(); });
+  c.checked = !!get();
+  return l;
+}
+
+function buildControls() {
+  const L = $('latticeCtl'); L.innerHTML = '';
+  addRow(L, {label: 'a (pm)', title: 'lattice constant', min: 200, max: 1000, step: 1, hmin: 50, hmax: 5000,
+             get: () => P.a_pm, set: v => { P.a_pm = v; }});
+  addRow(L, {label: 'rotation (&deg;)', title: 'lattice rotation relative to the scan', min: -45, max: 45, step: 0.5,
+             hmin: -180, hmax: 180, get: () => P.rot_deg, set: v => { P.rot_deg = v; }});
+  addRow(L, {label: 'probe r (pm)', title: 'probe half width at half maximum; FWHM = 2r', min: 20, max: 300, step: 1,
+             hmin: 5, hmax: 2000, get: () => P.probe_r_pm, set: v => { P.probe_r_pm = v; }});
+
+  const D = $('driftCtl'); D.innerHTML = '';
+  addRow(D, {label: 'speed (pm/s)', min: 0, max: 200, step: 1, hmax: 1e5, get: () => P.drift_speed, set: v => { P.drift_speed = v; }});
+  addRow(D, {label: 'direction (&deg;)', title: '0 = +x (fast axis, right), 90 = +y (slow axis, down)', min: -180, max: 180,
+             step: 1, get: () => P.drift_dir, set: v => { P.drift_dir = v; }});
+
+  seg($('pxSeg'), [[128, '128'], [256, '256'], [512, '512'], [1024, '1024']], () => P.npx, v => { P.npx = v; changed(); });
+  const S = $('scanCtl'); S.innerHTML = '';
+  addRow(S, {label: 'FOV (nm)', min: 1, max: 40, log: true, hmin: 0.2, hmax: 400, get: () => P.fov_nm, set: v => { P.fov_nm = v; }});
+  addRow(S, {label: 'dwell (&micro;s)', min: 0.5, max: 64, log: true, hmin: 0.05, hmax: 1000, get: () => P.dwell_us, set: v => { P.dwell_us = v; }});
+  addRow(S, {label: 'flyback (&micro;s)', min: 0, max: 200, step: 1, hmax: 1e5, get: () => P.flyback_us, set: v => { P.flyback_us = v; }});
+  addRow(S, {label: 'frames', min: 1, max: 32, int: true, hmax: 200, get: () => P.frames, set: v => { P.frames = v; }});
+  addRow(S, {label: 'dose (counts)', title: 'counts from an atom column, above the background, at its centre', min: 1, max: 10000,
+             log: true, hmin: 0.01, hmax: 1e7, get: () => P.dose, set: v => { P.dose = v; }});
+  addRow(S, {label: 'background (&times;)', title: 'a uniform background, in units of the column signal. It adds shot noise but no lattice ' +
+             'contrast. 9 gives the valley/peak of 0.9 seen in real single frames.', min: 0, max: 20, step: 0.1, hmax: 1e4,
+             get: () => P.background, set: v => { P.background = v; }});
+  const nc = $('noiseChk'); nc.checked = P.noise;
+  nc.onchange = () => { P.noise = nc.checked; changed(); };
+  refreshers.push(() => { nc.checked = P.noise; });
+  const sn = $('seedNum'); sn.value = P.seed;
+  sn.onchange = () => { const v = parseInt(sn.value, 10); if (isFinite(v)) P.seed = v; sn.value = P.seed; changed(); };
+  refreshers.push(() => { sn.value = P.seed; });
+  $('reseed').onclick = () => { P.seed = (Math.random()*1e6) | 0; sn.value = P.seed; changed(); };
+
+  buildModes();
+
+  seg($('imgSeg'), [['frame', 'frame 1'], ['avg', 'frame average']], () => ui.imgMode, v => { ui.imgMode = v; drawImage(); });
+  seg($('zoomSeg'), [[1, 'full'], [2, '×2'], [4, '×4'], [8, '×8']], () => ui.zoom, v => { ui.zoom = v; drawFFT(); });
+  seg($('plotTabs'), [['spec', 'spectrum'], ['time', 'time trace']], () => ui.tab, v => { ui.tab = v; buildPlotOpts(); drawPlot(); });
+  buildPlotOpts();
+
+  const sc = $('scenarios'); sc.innerHTML = '';
+  SCENARIOS.forEach(s => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = s.name;
+    const tmp = document.createElement('div'); tmp.innerHTML = s.note; b.title = tmp.textContent;
+    b.onclick = () => { P = Object.assign(clone(DEFAULTS), clone(s.p)); $('scenarioNote').innerHTML = s.note; syncAll(); changed(); };
+    sc.appendChild(b);
+  });
+}
+function buildPlotOpts() {
+  const o = $('plotOpts'); o.innerHTML = '';
+  if (ui.tab !== 'spec') {
+    o.innerHTML = '<span class="cap" style="margin:0"><span class="swatch" style="border-color:' + C.x + '"></span>s<sub>x</sub> (fast axis)' +
+      ' &nbsp; <span class="swatch" style="border-color:' + C.y + '"></span>s<sub>y</sub> (slow axis) &nbsp; vibration only, over frame 1</span>';
+    return;
+  }
+  const rd = () => drawPlot();
+  const leg = (color, label) => { const s = document.createElement('span'); s.className = 'legitem';
+    s.innerHTML = '<span class="swatch" style="border-color:' + color + '"></span>' + label; o.appendChild(s); };
+  leg(C.ext, 'extracted');
+  leg(C.set, 'set, per bin');
+  chk(o, 'expected reading', () => ui.showExp, v => { ui.showExp = v; rd(); }, C.exp);
+  chk(o, 'x-only reading (the old method)', () => ui.showXO, v => { ui.showXO = v; rd(); }, C.xo);
+  chk(o, 'measurement floor', () => ui.showFloor, v => { ui.showFloor = v; rd(); }, C.floor);
+  chk(o, 'linear f', () => ui.linF, v => { ui.linF = v; rd(); });
+}
+function buildModes() {
+  const box = $('modesCtl'); box.innerHTML = '';
+  P.modes.forEach((m, idx) => {
+    const d = document.createElement('div'); d.className = 'mode' + (m.on ? '' : ' off');
+    const head = document.createElement('div'); head.className = 'modehead';
+    const on = document.createElement('input'); on.type = 'checkbox'; on.checked = m.on; on.style.accentColor = 'var(--accent)';
+    on.onchange = () => { m.on = on.checked; d.classList.toggle('off', !m.on); changed(); };
+    const ttl = document.createElement('span'); ttl.className = 'ttl'; ttl.textContent = 'Mode ' + (idx + 1);
+    const isoL = document.createElement('label'); isoL.className = 'chk'; isoL.style.margin = '0';
+    const iso = document.createElement('input'); iso.type = 'checkbox'; iso.checked = !!m.iso;
+    isoL.append(iso, document.createTextNode('isotropic'));
+    const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.title = 'remove';
+    x.onclick = () => { P.modes.splice(idx, 1); buildModes(); changed(); };
+    head.append(on, ttl, isoL, x); d.appendChild(head);
+    addRow(d, {label: 'f (Hz)', title: 'centre frequency', min: 0.5, max: 1000, log: true, hmin: 0, hmax: 1e5,
+               get: () => m.f, set: v => { m.f = v; }});
+    addRow(d, {label: 'w (Hz)', title: 'full width at half maximum of the Lorentzian; 0 = a pure tone', min: 0, max: 50,
+               step: 0.1, hmax: 1e4, get: () => m.w, set: v => { m.w = v; }});
+    addRow(d, {label: 'a (pm rms)', title: 'rms displacement of this mode (both axes together if isotropic)', min: 0, max: 100,
+               step: 0.5, hmax: 1e4, get: () => m.a, set: v => { m.a = v; }});
+    const dirRow = addRow(d, {label: 'direction (&deg;)', title: '0 = along x (fast axis), 90 = along y (slow axis)',
+               min: -90, max: 90, step: 1, get: () => m.dir, set: v => { m.dir = v; }});
+    const paintIso = () => { dirRow.style.opacity = m.iso ? 0.35 : 1; dirRow.style.pointerEvents = m.iso ? 'none' : ''; };
+    iso.onchange = () => { m.iso = iso.checked; paintIso(); changed(); };
+    paintIso();
+    box.appendChild(d);
+  });
+  $('addMode').disabled = P.modes.length >= 4;
+}
+function syncAll() { refreshers.length = 0; buildControls(); }
+
+$('addMode').onclick = () => {
+  if (P.modes.length >= 4) return;
+  P.modes.push({on: true, f: 8, w: 1, a: 10, dir: 90, iso: false});
+  buildModes(); changed();
+};
+$('resetAll').onclick = () => { P = clone(DEFAULTS); $('scenarioNote').textContent = ''; syncAll(); changed(); };
+$('copyLink').onclick = () => {
+  saveState();
+  const url = location.href;
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(
+    () => { $('copyLink').textContent = 'copied'; setTimeout(() => { $('copyLink').textContent = 'copy link to this state'; }, 1200); },
+    () => { prompt('Copy this link:', url); });
+};
+
+const SCENARIOS = [
+  {name: 'defaults', note: 'One 20 Hz mode at 30&deg;, a little drift, and a single frame with the noise and background of a real raw frame.', p: {}},
+  {name: 'pure x tone', note: 'A clean 30 Hz tone along the fast axis. The satellite method was built for this case, and x-only and x+y agree.',
+   p: {modes: [{on: true, f: 30, w: 0, a: 20, dir: 0, iso: false}], drift_speed: 0}},
+  {name: 'pure y tone', note: 'The same tone along the slow axis. The x+y fit recovers it; switch on the x-only reading to see the old method under-read it.',
+   p: {modes: [{on: true, f: 30, w: 0, a: 20, dir: 90, iso: false}], drift_speed: 0}},
+  {name: 'above Nyquist', note: 'A 200 Hz tone on a 242 Hz line rate (Nyquist 121 Hz). It folds to 242 &minus; 200 = 42 Hz, and loses amplitude to the row average at its true frequency.',
+   p: {modes: [{on: true, f: 200, w: 0, a: 20, dir: 30, iso: false}], drift_speed: 0}},
+  {name: 'near Nyquist', note: 'A 110 Hz tone, x = f&middot;t<sub>active</sub> = 0.45. Each row averages the motion through the Hann window, response sinc(x)/(1&minus;x&sup2;), and the reading divides that back out. Until 2026-09-11 the code divided by sinc(x) instead, the response of a uniform average, and read this tone about 1.25&times; high.',
+   p: {modes: [{on: true, f: 110, w: 0, a: 20, dir: 30, iso: false}], drift_speed: 0}},
+  {name: 'axis-aligned lattice', note: 'Lattice rotation 0&deg;: (1,&plusmn;1), (2,0)/(2,&plusmn;1)&hellip; share FFT columns, the reflections point only two ways, and the fit falls back to x only.',
+   p: {rot_deg: 0}},
+  {name: 'broadband + mains', note: 'An isotropic 8 Hz floor resonance 6 Hz wide plus a narrow 50 Hz line along x.',
+   p: {modes: [{on: true, f: 8, w: 6, a: 15, dir: 0, iso: true}, {on: true, f: 50, w: 0.2, a: 8, dir: 0, iso: false}], frames: 8}},
+  {name: 'fast drift', note: '2 nm/s of drift: the lattice shears within each frame, the Bragg reflections move, and low-frequency leakage rises.',
+   p: {modes: [{on: true, f: 40, w: 2, a: 10, dir: 30, iso: false}], drift_speed: 2000, drift_dir: 60}}
+];
+
+/* ================================================================
+   3.  Running: a Web Worker from the inline core, main thread if refused
+   ================================================================ */
+// No worker when the page is opened straight from disk: Chrome refuses a blob: worker for a file:// page
+// (origin 'null'), and the main thread is fast enough at these sizes. ?noworker forces the same path.
+let worker = null, busy = false, jobId = 0, last = null, timer = null;
+let workerOK = location.protocol !== 'file:' && location.search.indexOf('noworker') < 0 && typeof Worker !== 'undefined';
+function makeWorker() {
+  try {
+    const src = CORE_SRC + '\n' + $('workerGlue').textContent;
+    const w = new Worker(URL.createObjectURL(new Blob([src], {type: 'text/javascript'})));
+    w.onmessage = onMsg;
+    w.onerror = e => { e.preventDefault && e.preventDefault(); workerOK = false; worker = null; busy = false; run(); };
+    return w;
+  } catch (e) { workerOK = false; return null; }
+}
+function setStatus(txt, isBusy) { const s = $('status'); s.textContent = txt; s.classList.toggle('busy', !!isBusy); }
+function run() {
+  const id = ++jobId;
+  setStatus('computing…', true);
+  const params = clone(P);
+  if (workerOK) {
+    if (busy && worker) { worker.terminate(); worker = null; }
+    if (!worker) worker = makeWorker();
+    if (worker) { busy = true; worker.postMessage({id: id, params: params}); return; }
+  }
+  setTimeout(() => {
+    if (id !== jobId) return;
+    try { show(SimCore.simulate(params, null)); } catch (e) { showError(e); }
+  }, 20);
+}
+function onMsg(e) {
+  const d = e.data;
+  if (d.id !== jobId) return;
+  if (d.type === 'progress') setStatus('computing… ' + d.msg, true);
+  else if (d.type === 'done') { busy = false; show(d.res); }
+  else if (d.type === 'error') { busy = false; showError(d.msg); }
+}
+function changed() { saveState(); updateDerived(); clearTimeout(timer); timer = setTimeout(run, 180); }
+function showError(e) { setStatus('error', false); $('warnings').innerHTML = '<div class="warn">' + String(e).replace(/</g, '&lt;') + '</div>'; }
+function show(res) {
+  last = res;
+  setStatus(res.timing.total.toFixed(0) + ' ms', false);
+  drawImage(); drawFFT(); drawPlot(); drawReadout();
+}
+function updateDerived() {
+  const M = P.npx, tLine = M*P.dwell_us + P.flyback_us, fs = 1e6/tLine;
+  $('scanDerived').innerHTML =
+    'pixel ' + (P.fov_nm*1000/M).toFixed(2) + ' pm &middot; ' + (P.a_pm/(P.fov_nm*1000/M)).toFixed(1) + ' px per cell<br>' +
+    'line ' + tLine.toFixed(0) + ' &micro;s &rarr; line rate ' + fs.toFixed(1) + ' Hz, Nyquist ' + (fs/2).toFixed(1) + ' Hz<br>' +
+    'frame ' + (M*tLine*1e-6).toFixed(2) + ' s &middot; resolution ' + (fs/M).toFixed(3) + ' Hz';
+}
+
+/* ================================================================
+   4.  Drawing
+   ================================================================ */
+const C = {set: '#8a8a8a', exp: '#80cbc4', ext: '#ffb74d', xo: '#ce93d8', floor: '#ef9a9a', nyq: '#e0e0e0',
+           x: '#80cbc4', y: '#ffb74d', grid: '#262626', axis: '#555', txt: '#9e9e9e'};
+C.exp = Object.assign(new String('#80cbc4'), {dash: true}); C.floor = Object.assign(new String('#ef9a9a'), {dash: true});
+
+function fitCanvas(cv) {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(10, Math.round(r.width*dpr)), h = Math.max(10, Math.round(r.height*dpr));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return {w: w, h: h, dpr: dpr, cw: r.width, ch: r.height};
+}
+function pct(arr, qs, stride) {
+  const s = []; for (let i = 0; i < arr.length; i += stride || 1) s.push(arr[i]);
+  s.sort((a, b) => a - b);
+  return qs.map(q => s[Math.min(s.length - 1, Math.max(0, Math.round(q*(s.length - 1))))]);
+}
+const INFERNO = [[0, 0, 0, 4], [0.13, 31, 12, 72], [0.25, 85, 15, 109], [0.38, 136, 34, 106], [0.5, 186, 54, 85],
+                 [0.63, 227, 89, 51], [0.75, 249, 140, 10], [0.88, 249, 201, 50], [1, 252, 255, 164]];
+const LUT = (() => {
+  const lut = new Uint8ClampedArray(256*3);
+  for (let i = 0; i < 256; i++) {
+    const v = i/255; let k = 0; while (k < INFERNO.length - 2 && INFERNO[k + 1][0] < v) k++;
+    const a = INFERNO[k], b = INFERNO[k + 1], t = (v - a[0])/(b[0] - a[0]);
+    for (let c = 0; c < 3; c++) lut[i*3 + c] = a[c + 1] + (b[c + 1] - a[c + 1])*t;
+  }
+  return lut;
+})();
+
+let imgView = null;
+function drawImage() {
+  const cv = $('imgCv'), g = fitCanvas(cv), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, g.w, g.h);
+  if (!last) return;
+  const N = last.N, M = last.M, src = ui.imgMode === 'avg' ? last.imgAvg : last.img0;
+  const [lo, hi] = pct(src, [0.005, 0.995], Math.max(1, Math.floor(src.length/40000)));
+  const off = document.createElement('canvas'); off.width = M; off.height = N;
+  const oc = off.getContext('2d'), id = oc.createImageData(M, N), d = id.data, sc = 255/Math.max(1e-12, hi - lo);
+  for (let i = 0; i < N*M; i++) {
+    const v = Math.max(0, Math.min(255, (src[i] - lo)*sc));
+    d[4*i] = d[4*i + 1] = d[4*i + 2] = v; d[4*i + 3] = 255;
+  }
+  oc.putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = M > g.w;
+  ctx.drawImage(off, 0, 0, g.w, g.h);
+  // scale bar
+  const fov = last.pxPm*M/1000, bar = fov > 12 ? 5 : fov > 5 ? 2 : fov > 2 ? 1 : 0.5, px = bar/fov*g.w;
+  ctx.fillStyle = '#fff'; ctx.fillRect(12*g.dpr, g.h - 18*g.dpr, px, 4*g.dpr);
+  ctx.font = (11*g.dpr) + 'px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'bottom';
+  ctx.fillText(bar + ' nm', 12*g.dpr, g.h - 22*g.dpr);
+  $('imgAside').textContent = M + '² px · ' + fov.toFixed(2) + ' nm · ' + (ui.imgMode === 'avg' ? last.nFrames + ' frames averaged' : 'frame 1 of ' + last.nFrames);
+  imgView = {g: g, N: N, M: M, src: src};
+}
+let fftView = null;
+function drawFFT() {
+  const cv = $('fftCv'), g = fitCanvas(cv), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, g.w, g.h);
+  if (!last) return;
+  const N = last.N, M = last.M, z = ui.zoom, hN = Math.max(8, Math.round(N/(2*z))), hM = Math.max(8, Math.round(M/(2*z)));
+  const r0 = N/2 - hN, c0 = M/2 - hM, nr = 2*hN, nc = 2*hM;
+  const crop = new Float32Array(nr*nc);
+  for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) crop[i*nc + j] = last.fftLog[(r0 + i)*M + (c0 + j)];
+  const [lo, hi] = pct(crop, [0.35, 0.9998], Math.max(1, Math.floor(crop.length/40000)));
+  const off = document.createElement('canvas'); off.width = nc; off.height = nr;
+  const oc = off.getContext('2d'), id = oc.createImageData(nc, nr), d = id.data, sc = 255/Math.max(1e-9, hi - lo);
+  for (let i = 0; i < nr*nc; i++) {
+    const v = Math.max(0, Math.min(255, Math.round((crop[i] - lo)*sc)));
+    d[4*i] = LUT[3*v]; d[4*i + 1] = LUT[3*v + 1]; d[4*i + 2] = LUT[3*v + 2]; d[4*i + 3] = 255;
+  }
+  oc.putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, 0, 0, g.w, g.h);
+  const bx = g.w/nc, by = g.h/nr;
+  const toC = (kx, ky) => [(M/2 + kx - c0 + 0.5)*bx, (N/2 + ky - r0 + 0.5)*by];
+  // the columns the satellites are read from, and the reflections themselves
+  ctx.lineWidth = 1*g.dpr;
+  last.gs.forEach(gg => {
+    const [x, y] = toC(gg.kx, gg.ky);
+    ctx.strokeStyle = 'rgba(128,203,196,0.28)'; ctx.setLineDash([3*g.dpr, 4*g.dpr]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, g.h); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#80cbc4'; ctx.lineWidth = 1.4*g.dpr;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(6*g.dpr, 2.2*bx), 0, 2*Math.PI); ctx.stroke();
+    ctx.fillStyle = '#80cbc4'; ctx.font = (10.5*g.dpr) + 'px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'bottom';
+    ctx.fillText('(' + gg.h + ' ' + gg.k + ')', x + 7*g.dpr, y - 5*g.dpr);
+  });
+  $('fftAside').textContent = 'log scale · ' + last.nFrames + ' frame' + (last.nFrames > 1 ? 's' : '') + ' averaged';
+  fftView = {g: g, N: N, M: M, r0: r0, c0: c0, nr: nr, nc: nc};
+}
+
+/* ---- line plot ---- */
+function log10(v) { return Math.log(v)/Math.LN10; }
+function niceLin(lo, hi, n) {
+  const span = hi - lo, raw = span/Math.max(1, n), mag = Math.pow(10, Math.floor(log10(raw))), r = raw/mag;
+  const st = (r < 1.5 ? 1 : r < 3.5 ? 2 : r < 7.5 ? 5 : 10)*mag, out = [];
+  for (let v = Math.ceil(lo/st)*st; v <= hi + 1e-9*st; v += st) out.push(+v.toPrecision(12));
+  return out;
+}
+function fmtTick(v) {
+  const a = Math.abs(v);
+  if (a === 0) return '0';
+  if (a >= 1e4 || a < 1e-3) return v.toExponential(0);
+  return (+v.toPrecision(4)).toString();
+}
+let plotView = null;
+function plotLines(cv, o) {
+  const g = fitCanvas(cv), ctx = cv.getContext('2d'), d = g.dpr;
+  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, g.w, g.h);
+  const L = 62*d, R = 14*d, T = 14*d, B = 42*d, W = g.w - L - R, Hh = g.h - T - B;
+  const tx = v => o.xlog ? L + (log10(v) - log10(o.x0))/(log10(o.x1) - log10(o.x0))*W : L + (v - o.x0)/(o.x1 - o.x0)*W;
+  const ty = v => o.ylog ? T + Hh - (log10(v) - log10(o.y0))/(log10(o.y1) - log10(o.y0))*Hh : T + Hh - (v - o.y0)/(o.y1 - o.y0)*Hh;
+  const inv = px => o.xlog ? Math.pow(10, log10(o.x0) + (px - L)/W*(log10(o.x1) - log10(o.x0))) : o.x0 + (px - L)/W*(o.x1 - o.x0);
+  ctx.font = (11*d) + 'px ui-monospace,Consolas,monospace'; ctx.lineWidth = 1*d;
+  // shading
+  (o.shade || []).forEach(s => {
+    const a = tx(Math.max(o.x0, s.x0)), b = tx(Math.min(o.x1, s.x1));
+    if (b > a) { ctx.fillStyle = s.fill; ctx.fillRect(a, T, b - a, Hh); }
+    // second line, under the Nyquist label that sits at the top of the same boundary
+    if (s.label && b - a > ctx.measureText(s.label).width + 12*d) {
+      ctx.fillStyle = '#6f6f6f'; ctx.textBaseline = 'top'; ctx.fillText(s.label, a + 6*d, T + 18*d);
+    }
+  });
+  // grid + ticks
+  const ticks = (lo, hi, isLog) => {
+    if (!isLog) return {maj: niceLin(lo, hi, 7), min: []};
+    const maj = [], min = [], e0 = Math.floor(log10(lo)), e1 = Math.ceil(log10(hi)), few = hi/lo < 40;
+    for (let e = e0; e <= e1; e++) for (let m = 1; m < 10; m++) {
+      const v = m*Math.pow(10, e); if (v < lo*0.999 || v > hi*1.001) continue;
+      if (m === 1 || (few && (m === 2 || m === 5))) maj.push(v); else min.push(v);
+    }
+    return {maj, min};
+  };
+  const xt = ticks(o.x0, o.x1, o.xlog), yt = ticks(o.y0, o.y1, o.ylog);
+  ctx.strokeStyle = C.grid;
+  xt.min.forEach(v => { const x = tx(v); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + Hh); ctx.stroke(); });
+  yt.min.forEach(v => { const y = ty(v); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + W, y); ctx.stroke(); });
+  ctx.strokeStyle = '#313131';
+  xt.maj.forEach(v => { const x = tx(v); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + Hh); ctx.stroke(); });
+  yt.maj.forEach(v => { const y = ty(v); ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + W, y); ctx.stroke(); });
+  ctx.fillStyle = C.txt; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  xt.maj.forEach(v => ctx.fillText(fmtTick(v), tx(v), T + Hh + 5*d));
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  yt.maj.forEach(v => ctx.fillText(fmtTick(v), L - 6*d, ty(v)));
+  ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(o.xlabel, L + W/2, g.h - 4*d);
+  ctx.save(); ctx.translate(14*d, T + Hh/2); ctx.rotate(-Math.PI/2); ctx.textBaseline = 'middle'; ctx.fillText(o.ylabel, 0, 0); ctx.restore();
+  ctx.textAlign = 'left';
+  // series
+  ctx.save(); ctx.beginPath(); ctx.rect(L, T, W, Hh); ctx.clip();
+  (o.vlines || []).forEach(v => {
+    if (v.x < o.x0 || v.x > o.x1) return;
+    ctx.strokeStyle = v.color; ctx.setLineDash(v.dash ? [4*d, 4*d] : []); ctx.lineWidth = 1*d;
+    ctx.beginPath(); ctx.moveTo(tx(v.x), T); ctx.lineTo(tx(v.x), T + Hh); ctx.stroke(); ctx.setLineDash([]);
+  });
+  (o.hlines || []).forEach(v => {
+    ctx.strokeStyle = v.color; ctx.setLineDash(v.dash ? [5*d, 4*d] : []); ctx.lineWidth = 1*d;
+    ctx.beginPath(); ctx.moveTo(L, ty(v.y)); ctx.lineTo(L + W, ty(v.y)); ctx.stroke(); ctx.setLineDash([]);
+  });
+  o.series.forEach(s => {
+    ctx.strokeStyle = s.color; ctx.lineWidth = (s.width || 1.2)*d; ctx.setLineDash(s.dash ? [5*d, 3*d] : []);
+    ctx.globalAlpha = s.alpha || 1;
+    ctx.beginPath(); let pen = false;
+    for (let i = 0; i < s.x.length; i++) {
+      const xv = s.x[i], yv = s.y[i];
+      if (!(isFinite(yv)) || (o.ylog && yv <= 0) || (o.xlog && xv <= 0)) { pen = false; continue; }
+      const X = tx(xv), Y = ty(Math.max(yv, o.ylog ? o.y0*0.5 : -1e300));
+      if (!pen) { ctx.moveTo(X, Y); pen = true; } else ctx.lineTo(X, Y);
+    }
+    ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  });
+  (o.labels || []).forEach(lb => {
+    if (lb.x < o.x0 || lb.x > o.x1) return;
+    const X = tx(lb.x), wd = ctx.measureText(lb.text).width, left = X + 4*d + wd > L + W;   // flip when it would run off
+    ctx.fillStyle = lb.color; ctx.textBaseline = 'top'; ctx.textAlign = left ? 'right' : 'left';
+    ctx.fillText(lb.text, left ? X - 4*d : X + 4*d, T + 4*d + (lb.row || 0)*13*d);
+    ctx.textAlign = 'left';
+  });
+  ctx.restore();
+  ctx.strokeStyle = C.axis; ctx.strokeRect(L, T, W, Hh);
+  return {g, L, T, W, Hh, inv, tx, ty, o};
+}
+function drawPlot() {
+  const cv = $('plotCv');
+  if (!last) { plotLines(cv, {x0: 1, x1: 10, y0: 1, y1: 10, xlog: true, ylog: true, series: [], xlabel: '', ylabel: ''}); return; }
+  if (ui.tab === 'time') return drawTrace();
+  const r = last, st = r.set, nyq = r.nyq, lin = ui.linF;
+  const x0 = lin ? 0 : Math.max(r.df*2, 0.3), x1 = Math.max(nyq*1.3, st.fTrue[st.fTrue.length - 1] || nyq);
+  const vis = [];
+  const take = (xs, ys) => { for (let i = 0; i < xs.length; i++) if (xs[i] >= x0 && xs[i] <= x1 && ys[i] > 0) vis.push(ys[i]); };
+  take(r.f, r.amp); take(st.fTrue, st.aTrue); if (ui.showExp) take(st.fExp, st.aExp); if (ui.showXO) take(r.f, r.amp_x_only);
+  const vmax = vis.length ? Math.max.apply(null, vis) : 1;
+  const floor = r.reduce.floor;
+  const y1 = vmax*2.2, y0 = Math.max(Math.min(floor*0.25, vmax*1e-3), vmax*1e-5);
+  const series = [{x: st.fTrue, y: st.aTrue, color: C.set, width: 1.1, label: 'set, per bin'}];
+  if (ui.showExp) series.push({x: st.fExp, y: st.aExp, color: String(C.exp), width: 1.4, dash: true, label: 'expected reading'});
+  if (ui.showXO) series.push({x: r.f, y: r.amp_x_only, color: C.xo, width: 1.1, label: 'x-only reading'});
+  series.push({x: r.f, y: r.amp, color: C.ext, width: 1.5, label: r.motion === 'x+y' ? 'extracted, x+y' : 'extracted (x only)'});
+  plotView = plotLines(cv, {
+    xlog: !lin, ylog: true, x0: x0 || 0, x1: x1, y0: y0, y1: y1, series: series,
+    shade: [{x0: nyq, x1: x1*2, fill: 'rgba(255,255,255,0.045)', label: 'above Nyquist: folds back'}],
+    vlines: [{x: nyq, color: '#777', dash: true}],
+    hlines: ui.showFloor ? [{y: floor, color: String(C.floor), dash: true}] : [],
+    labels: [{x: nyq, text: 'Nyquist ' + nyq.toFixed(1) + ' Hz', color: '#9e9e9e', row: 0}],
+    xlabel: 'frequency (Hz)', ylabel: 'amplitude per bin (pm)'
+  });
+  plotView.kind = 'spec';
+  $('plotCap').innerHTML = 'Amplitude per FFT bin (' + r.df.toFixed(3) + ' Hz wide), the axis <code>haadf_vib</code> plots: a tone of rms a reads a&middot;&radic;2 in its bin. ' +
+    (ui.showFloor ? '<span style="color:' + C.floor + '">Dashed red</span>: the measurement floor, ' + floor.toFixed(2) + ' pm/bin. ' : '') +
+    'Extracted ' + (r.motion === 'x+y' ? 'from ' + r.gs.length + ' reflections in ' + r.n_directions + ' directions.' : 'x only: too few reflection directions.');
+}
+function drawTrace() {
+  const r = last, tr = r.trace, cv = $('plotCv');
+  let m = 0; for (let i = 0; i < tr.x.length; i++) m = Math.max(m, Math.abs(tr.x[i]), Math.abs(tr.y[i]));
+  m = m || 1;
+  plotView = plotLines(cv, {xlog: false, ylog: false, x0: 0, x1: r.tFrame*1e3, y0: -m*1.15, y1: m*1.15,
+    series: [{x: tr.t, y: tr.x, color: C.x, width: 1, label: 's_x'}, {x: tr.t, y: tr.y, color: C.y, width: 1, label: 's_y'}],
+    hlines: [{y: 0, color: '#444'}], xlabel: 'time within frame 1 (ms)', ylabel: 'specimen displacement (pm)'});
+  plotView.kind = 'time';
+  $('plotCap').innerHTML = 'The vibration you set, as the scan sees it through frame 1 (drift excluded). One row takes ' +
+    (r.tLine*1e3).toFixed(3) + ' ms, of which ' + (r.tActive*1e3).toFixed(3) + ' ms records pixels.';
+}
+
+/* ---- hover tooltips ---- */
+function tipAt(tip, box, ev, text) {
+  if (!text) { tip.style.display = 'none'; return; }
+  const b = box.getBoundingClientRect();
+  tip.textContent = text; tip.style.display = 'block';
+  let x = ev.clientX - b.left + 14, y = ev.clientY - b.top + 12;
+  if (x + tip.offsetWidth > b.width - 4) x = ev.clientX - b.left - tip.offsetWidth - 10;
+  if (y + tip.offsetHeight > b.height - 4) y = ev.clientY - b.top - tip.offsetHeight - 10;
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+}
+$('imgFig').addEventListener('mousemove', ev => {
+  if (!imgView) return;
+  const b = $('imgCv').getBoundingClientRect(), j = Math.floor((ev.clientX - b.left)/b.width*imgView.M),
+        i = Math.floor((ev.clientY - b.top)/b.height*imgView.N);
+  if (i < 0 || j < 0 || i >= imgView.N || j >= imgView.M) return tipAt($('imgTip'), $('imgFig'), ev, null);
+  tipAt($('imgTip'), $('imgFig'), ev, 'x ' + (j*last.pxPm/1000).toFixed(3) + ' nm  y ' + (i*last.pxPm/1000).toFixed(3) +
+    ' nm\nrow ' + i + ' col ' + j + '  counts ' + imgView.src[i*imgView.M + j].toFixed(1));
+});
+$('imgFig').addEventListener('mouseleave', () => { $('imgTip').style.display = 'none'; });
+$('fftFig').addEventListener('mousemove', ev => {
+  if (!fftView) return;
+  const v = fftView, b = $('fftCv').getBoundingClientRect();
+  const cj = Math.floor((ev.clientX - b.left)/b.width*v.nc), ci = Math.floor((ev.clientY - b.top)/b.height*v.nr);
+  if (ci < 0 || cj < 0 || ci >= v.nr || cj >= v.nc) return tipAt($('fftTip'), $('fftFig'), ev, null);
+  const kx = v.c0 + cj - v.M/2, ky = v.r0 + ci - v.N/2;
+  let s = 'kx ' + kx + '  ky ' + ky + ' bins\nlog10|F| ' + last.fftLog[(v.r0 + ci)*v.M + v.c0 + cj].toFixed(2);
+  const gg = last.gs.find(q => Math.abs(q.kx - kx) <= 0.5);
+  if (gg) {
+    const dk = Math.abs(ky - Math.round(gg.ky));
+    s += '\nin the column of (' + gg.h + ' ' + gg.k + ')' + (dk ? ': satellite at k = ' + dk + ' → ' + (dk*last.df).toFixed(2) + ' Hz' : ': the Bragg reflection');
+  }
+  tipAt($('fftTip'), $('fftFig'), ev, s);
+});
+$('fftFig').addEventListener('mouseleave', () => { $('fftTip').style.display = 'none'; });
+function nearest(xs, x) { let lo = 0, hi = xs.length - 1; if (hi < 0) return -1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] < x) lo = m; else hi = m; } return Math.abs(xs[lo] - x) <= Math.abs(xs[hi] - x) ? lo : hi; }
+$('plotBox').addEventListener('mousemove', ev => {
+  if (!plotView || !last) return;
+  const b = $('plotCv').getBoundingClientRect(), px = (ev.clientX - b.left)*plotView.g.dpr;
+  if (px < plotView.L || px > plotView.L + plotView.W) return tipAt($('plotTip'), $('plotBox'), ev, null);
+  const x = plotView.inv(px);
+  let s;
+  if (plotView.kind === 'time') {
+    const i = nearest(last.trace.t, x);
+    s = 't ' + last.trace.t[i].toFixed(3) + ' ms\ns_x ' + last.trace.x[i].toFixed(2) + ' pm\ns_y ' + last.trace.y[i].toFixed(2) + ' pm';
+  } else {
+    s = 'f ' + x.toFixed(2) + ' Hz';
+    const i = nearest(last.f, x);
+    if (i >= 0 && x <= last.nyq) {
+      s += '\nextracted  ' + last.amp[i].toFixed(2) + ' pm @ ' + last.f[i].toFixed(2) + ' Hz';
+      if (ui.showXO) s += '\nx-only     ' + last.amp_x_only[i].toFixed(2) + ' pm';
+    }
+    const e = nearest(last.set.fExp, x); if (ui.showExp && e >= 0 && x <= last.nyq) s += '\nexpected   ' + last.set.aExp[e].toFixed(2) + ' pm';
+    const t = nearest(last.set.fTrue, x); if (t >= 0) s += '\nset        ' + last.set.aTrue[t].toFixed(2) + ' pm';
+    if (x > last.nyq) {
+      const fo = Math.abs(x - last.fs*Math.round(x/last.fs));
+      s += '\nwould appear at ' + fo.toFixed(2) + ' Hz';
+    }
+  }
+  tipAt($('plotTip'), $('plotBox'), ev, s);
+});
+$('plotBox').addEventListener('mouseleave', () => { $('plotTip').style.display = 'none'; });
+
+/* ---- readout ---- */
+function tbl(rows) { return '<table>' + rows.map(r => '<tr><td class="k">' + r[0] + '</td><td class="v">' + r[1] + '</td></tr>').join('') + '</table>'; }
+function drawReadout() {
+  const r = last, red = r.reduce, st = r.set, fmt = (v, n) => v == null ? '&ndash;' : v.toFixed(n == null ? 2 : n);
+  const g1 = '<div class="rgroup"><h3>Scan</h3>' + tbl([
+    ['line rate', fmt(r.fs, 1) + ' Hz'], ['Nyquist', fmt(r.nyq, 1) + ' Hz'], ['resolution', fmt(r.df, 3) + ' Hz'],
+    ['t<sub>active</sub> / t<sub>line</sub>', fmt(r.tActive*1e6, 0) + ' / ' + fmt(r.tLine*1e6, 0) + ' &micro;s'],
+    ['frame', fmt(r.tFrame, 2) + ' s &times; ' + r.nFrames], ['pixel', fmt(r.pxPm, 2) + ' pm']]) + '</div>';
+  const refl = '<div class="rgroup"><h3>Reflections read (' + r.gs.length + ', ' + r.n_directions + ' directions)</h3><table>' +
+    '<tr><th>(h k)</th><th>bins</th><th>angle</th><th>|g| nm&minus;1</th><th title="Bragg amplitude over the background of its column, frame 1">Bragg/bg</th></tr>' +
+    r.gs.map(g => '<tr><td class="k">(' + g.h + ' ' + g.k + ')</td><td class="v">' + g.kx.toFixed(0) + ', ' + g.ky.toFixed(0) +
+      '</td><td class="v">' + g.ang.toFixed(1) + '&deg;</td><td class="v">' + (g.gpm*1000).toFixed(2) + '</td><td class="v">' +
+      (g.snr >= 1e4 ? g.snr.toExponential(0) : g.snr.toFixed(0)) + '</td></tr>').join('') +
+    '</table><div class="cap">Bragg/bg measured on real single frames at the default settings: 60&ndash;117; at 4 &micro;s dwell: 22&ndash;56.</div></div>';
+  const g3 = '<div class="rgroup"><h3>Spectrum</h3>' + tbl([
+    ['reading', r.motion === 'x+y' ? '<span class="ok">x and y combined</span>' : '<span class="bad">x only (fallback)</span>'],
+    ['measurement floor', fmt(red.floor) + ' pm/bin'],
+    ['broadband rms, extracted', fmt(red.rms) + ' pm'],
+    ['set rms, 0.5 Hz&ndash;Nyquist', fmt(st.rmsInband) + ' pm'],
+    ['set rms, all f', fmt(st.rmsTotal) + ' pm'],
+    ['floor / x-only floor', r.y_cost == null ? '&ndash;' : fmt(r.y_cost) + '&times;']]) + '</div>';
+  const bandRows = SimCore.BANDS.map(bd => {
+    const name = bd[2], ex = red.bands[name], v = r.vel[name], s = st.bands[name];
+    const xt = r.crosstalk.filter(c => c >= bd[0] && c < bd[1]).length;
+    return '<tr><td class="k">' + name + (xt ? ' <span class="dp" title="includes lattice cross-talk">*</span>' : '') +
+      '</td><td class="v">' + bd[0] + '&ndash;' + bd[1] + '</td><td class="v">' + fmt(s) + '</td><td class="v">' +
+      (ex == null ? '<span style="color:#666">not covered</span>' : fmt(ex)) + '</td><td class="v">' + (v == null ? '&ndash;' : fmt(v, 3)) + '</td></tr>';
+  }).join('');
+  const g4 = '<div class="rgroup" style="grid-column:span 2"><h3>Bands (pm rms)</h3><table><tr><th>band</th><th>Hz</th><th>set</th><th>extracted excess</th><th>nm/s</th></tr>' +
+    bandRows + '</table><div class="cap">Extracted figures are motion in excess of the floor, as <code>haadf_vib</code> reports them. ' +
+    '* the band contains a lattice cross-talk frequency.</div></div>';
+  const lines = red.lines.length ? red.lines.map(l => {
+    const alts = SimCore.aliasCandidates(l[0], r.fs).filter(c => Math.abs(c - l[0]) > 1e-6).slice(0, 3);
+    const xt = r.crosstalk.some(c => Math.abs(c - l[0]) <= 2*r.df);
+    return '<tr><td class="v" style="text-align:left">' + fmt(l[0]) + '</td><td class="v">' + fmt(l[1]) + '</td><td class="v">' + fmt(l[2], 1) +
+      '</td><td class="v">' + (alts.map(c => c.toFixed(1)).join(', ') || '&ndash;') + (xt ? ' <span class="dp">x-talk?</span>' : '') + '</td></tr>';
+  }).join('') : '<tr><td class="k">none above ' + SimCore.LINE_MIN_PROM + '&times; the floor</td></tr>';
+  const g5 = '<div class="rgroup"><h3>Peaks</h3><table><tr><th>Hz</th><th>pm</th><th>&times;floor</th><th>could also be</th></tr>' + lines + '</table></div>';
+  $('readout').innerHTML = g1 + refl + g3 + g4 + g5;
+
+  const w = [];
+  if (r.motion !== 'x+y') {
+    w.push('<div class="warn">The reflections point only ' + r.n_directions + ' way' + (r.n_directions === 1 ? '' : 's') +
+      ', and 3 are needed to separate y, so this is x-motion only, with any y-motion mixed in. ' +
+      (Math.abs(((r.params.rot_deg % 90) + 90) % 90) < 1 ? 'With the lattice aligned to the scan, (1,&plusmn;1) and (2,0)/(2,&plusmn;1) share FFT columns; rotate it a few degrees.' : '') + '</div>');
+  } else if (r.y_cost > SimCore.Y_COST_WARN) {
+    w.push('<div class="warn">These reflections pin y down poorly: the floor is ' + r.y_cost.toFixed(1) +
+      '&times; what x alone would give, and band figures near it are mostly y noise.</div>');
+  }
+  if (r.crosstalk.length) {
+    w.push('<div class="notice">Lattice cross-talk at ' + r.crosstalk.slice(0, 6).map(c => c.toFixed(2)).join(', ') +
+      ' Hz &ndash; another reflection in a column being read shows up as a satellite there.</div>');
+  }
+  $('warnings').innerHTML = w.join('');
+}
+
+/* ================================================================
+   5.  Self-test  (index.html?selftest)
+   ================================================================ */
+function selftest() {
+  const out = []; let all = true;
+  const chk2 = (name, ok, detail) => { out.push((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? '   ' + detail : '')); all = all && ok; };
+  const t0 = performance.now();
+
+  // FFT against a naive DFT
+  { const n = 32, re = new Float64Array(n), im = new Float64Array(n), rng = Math.random;
+    for (let i = 0; i < n; i++) { re[i] = rng() - 0.5; im[i] = rng() - 0.5; }
+    const r2 = Float64Array.from(re), i2 = Float64Array.from(im); SimCore.fft1(r2, i2, SimCore.fftPlan(n));
+    let err = 0;
+    for (let k = 0; k < n; k++) { let sr = 0, si = 0;
+      for (let q = 0; q < n; q++) { const a = -2*Math.PI*k*q/n; sr += re[q]*Math.cos(a) - im[q]*Math.sin(a); si += re[q]*Math.sin(a) + im[q]*Math.cos(a); }
+      err = Math.max(err, Math.hypot(sr - r2[k], si - i2[k])); }
+    chk2('FFT matches a naive DFT', err < 1e-10, 'max error ' + err.toExponential(1)); }
+
+  // Bessel inversion round trip
+  { let err = 0; [0.05, 0.4, 1.0, 1.8, 2.25].forEach(b => { const r = SimCore.besselJ(1, b)/SimCore.besselJ(0, b); err = Math.max(err, Math.abs(SimCore.invertBesselRatio(r) - b)); });
+    chk2('J1/J0 inversion round trip', err < 1e-6, 'max error ' + err.toExponential(1));
+    chk2('J0(2.405) ~ 0 (first zero)', Math.abs(SimCore.besselJ(0, 2.404825557695773)) < 1e-12); }
+
+  // OU envelope: rms and width
+  { const A = 10, pr = SimCore.makeProcesses([{on: true, f: 0, w: 4, a: A, dir: 0}], 5, 400)[0];
+    let s = 0, n = 0; for (let k = 0; k < pr.re.length; k += 3) { s += pr.re[k]*pr.re[k]; n++; }
+    const rms = Math.sqrt(s/n);      // f = 0: xi = Re z, rms should be A
+    chk2('OU mode rms = a', Math.abs(rms/A - 1) < 0.1, 'rms ' + rms.toFixed(2) + ' pm for a = ' + A); }
+
+  // Lorentzian normalisation: all the power of a mode, in amp^2 units, is 2 a^2
+  { const p = SimCore.bandPower([{f: 40, w: 3, a: 7}], 0, 1e9);
+    chk2('set spectrum carries 2a²', Math.abs(p/98 - 1) < 1e-6, p.toFixed(4)); }
+
+  // 32 cells across the field: the satellite method is exact to ~0.1% here. With fewer cells it
+  // drifts by a few %, and at particular rotations more -- a property of the method, not the port.
+  const NPX = 512, base = {a_pm: 500, rot_deg: 15, probe_r_pm: 100, drift_speed: 0, drift_dir: 0, npx: NPX, fov_nm: 16,
+                dwell_us: 8, flyback_us: 32, frames: 1, dose: 1000, noise: false, seed: 3};
+  const run1 = (modes, extra) => SimCore.simulate(Object.assign({}, base, {modes: modes}, extra || {}), null);
+  const at = (r, f) => { let b = 0; for (let i = 0; i < r.f.length; i++) if (Math.abs(r.f[i] - f) < Math.abs(r.f[b] - f)) b = i; return b; };
+  const fs = 1/(NPX*8e-6 + 32e-6), df = fs/NPX, tA = NPX*8e-6;
+  const tone = f => Math.SQRT2*20;          // the row-average correction is exact for a centred reflection
+
+  // the exact discrete row response against its continuous form, and against a brute-force sum
+  { const M = 64, tau = 1e-6; let err = 0, errC = 0; const w = SimCore.hanning(M), sw = (M - 1)/2;
+    [0, 1234, 7777, 15625, 15625*0.93, 22222, 40000].forEach(f => {
+      let re = 0, im = 0; for (let j = 0; j < M; j++) { re += w[j]*Math.cos(2*Math.PI*f*tau*j); im += w[j]*Math.sin(2*Math.PI*f*tau*j); }
+      err = Math.max(err, Math.abs(Math.hypot(re, im)/sw - SimCore.hannRespD(f, tau, M)));
+    });
+    chk2('discrete Hann row response = brute-force sum', err < 1e-12, 'max error ' + err.toExponential(1)); }
+
+  // a bin-centred pure-x tone
+  { const k0 = 40, f = k0*df, r = run1([{on: true, f: f, w: 0, a: 20, dir: 0}]), i = at(r, f), want = tone(f);
+    chk2('pure x tone: amplitude at its bin', Math.abs(r.amp[i]/want - 1) < 0.02,
+         'read ' + r.amp[i].toFixed(2) + ' pm, expect ' + want.toFixed(2) + ' (' + r.motion + ', ' + r.n_directions + ' directions)');
+    let pk = 0; for (let q = 0; q < r.amp.length; q++) if (r.amp[q] > r.amp[pk]) pk = q;
+    chk2('pure x tone: the peak is at f', Math.abs(r.f[pk] - f) < 0.5*df, r.f[pk].toFixed(2) + ' Hz vs ' + f.toFixed(2)); }
+
+  // pure y and diagonal: the fit recovers them, the old x-only reading does not
+  [[90, 'pure y'], [45, 'diagonal']].forEach(([dir, name]) => {
+    const k0 = 40, f = k0*df, r = run1([{on: true, f: f, w: 0, a: 20, dir: dir}]), i = at(r, f), want = tone(f);
+    chk2(name + ' tone: x+y fit recovers it', Math.abs(r.amp[i]/want - 1) < 0.02, 'read ' + r.amp[i].toFixed(2) + ' pm, expect ' + want.toFixed(2));
+    if (dir === 90) chk2(name + ' tone: x-only reading is wrong', Math.abs(r.amp_x_only[i]/want - 1) > 0.1, 'x-only read ' + r.amp_x_only[i].toFixed(2) + ' pm');
+  });
+
+  // above Nyquist: folds to fs - f, at the amplitude the expected-reading curve predicts
+  { const k0 = 40, f = fs - k0*df, r = run1([{on: true, f: f, w: 0, a: 20, dir: 30}]), i = at(r, k0*df);
+    const e = r.set.aExp[at({f: r.set.fExp}, k0*df)], isPeak = r.amp[i] > 4*r.reduce.floor && r.amp[i] > r.amp[i - 1] && r.amp[i] > r.amp[i + 1];
+    chk2('above Nyquist: folds to fs - f', isPeak, f.toFixed(1) + ' Hz shows as a peak at ' + r.f[i].toFixed(2) + ' Hz, ' + (r.amp[i]/r.reduce.floor).toFixed(0) + 'x the floor');
+    // The expected-reading curve takes each row's response as the Hann kernel W(x). That is exact for a
+    // Bragg reflection centred on an FFT bin; one sitting delta off-centre reads [W(delta+x) + W(delta-x)]/2W(delta),
+    // because the +k and -k satellites slide x bins apart in fx. Under 0.5% below Nyquist, ~3% at x = 0.9.
+    chk2('above Nyquist: amplitude = expected reading', Math.abs(r.amp[i]/e - 1) < 0.05, r.amp[i].toFixed(2) + ' vs ' + e.toFixed(2) +
+         ' pm (x = ' + (f*tA).toFixed(2) + '; off-centre reflections allow a few %)'); }
+
+  // near Nyquist: the row average is Hann-weighted. The old 1/sinc correction read high by 1/(1 - x^2);
+  // the Hann-weighted one (vibration._row_response, 2026-09-11) reads the true amplitude.
+  { const k0 = 220, f = k0*df, A = 20, r = run1([{on: true, f: f, w: 0, a: A, dir: 30}]), i = at(r, f), x = f*tA;
+    const truth = Math.SQRT2*A, old = truth*SimCore.hannRespD(f, 8e-6, NPX)/Math.abs(SimCore.sinc(x));
+    chk2('near Nyquist: reads the true amplitude', Math.abs(r.amp[i]/truth - 1) < 0.02,
+         'read ' + r.amp[i].toFixed(2) + ' pm, true ' + truth.toFixed(2) + '; the old 1/sinc correction would read ' + old.toFixed(2) + ' (x = ' + x.toFixed(3) + ')'); }
+
+  // lattice orientation: axis-aligned falls back, rotated fits
+  { const r0 = run1([{on: true, f: 30, w: 0, a: 20, dir: 0}], {rot_deg: 0}), r15 = run1([{on: true, f: 30, w: 0, a: 20, dir: 0}]);
+    chk2('axis-aligned lattice: x-only fallback', r0.motion === 'x only', r0.gs.length + ' reflections, ' + r0.n_directions + ' directions');
+    chk2('rotated 15°: x+y fit', r15.motion === 'x+y', r15.gs.length + ' reflections, ' + r15.n_directions + ' directions');
+    let shared = false; r15.gs.forEach((a, i) => r15.gs.forEach((b, j) => { if (i < j && Math.abs(a.kx - b.kx) <= 1) shared = true; }));
+    chk2('no two reflections read share a column', !shared); }
+
+  out.push('', (all ? 'ALL PASS' : 'SOME CHECKS FAILED') + '   (' + (performance.now() - t0).toFixed(0) + ' ms)');
+  const bn = $('banner'); bn.style.display = 'block';
+  bn.style.background = all ? '#1b2a1d' : '#2e1a1a'; bn.style.color = all ? 'var(--ok)' : 'var(--bad)';
+  bn.textContent = out.join('\n');
+  window.__selftest = {all: all, out: out};
+}
+
+/* ================================================================
+   6.  Start
+   ================================================================ */
+try {
+  buildControls(); updateDerived();
+  $('noscriptMsg').style.display = 'none';
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => { if (last) { drawImage(); drawFFT(); drawPlot(); } });
+    ['imgFig', 'fftFig', 'plotBox'].forEach(id => ro.observe($(id)));
+  }
+  window.__sim = {SimCore: SimCore, params: () => clone(P), last: () => last, workerOK: () => workerOK};
+  if (location.search.indexOf('selftest') >= 0) setTimeout(selftest, 50);
+  run();
+} catch (e) {
+  const m = $('noscriptMsg'); m.style.display = 'block';
+  m.innerHTML = '<b>The simulator failed to start:</b> ' + String((e && e.stack) || e).replace(/</g, '&lt;');
+}
+})();
+</script>
+</body>
+</html>
