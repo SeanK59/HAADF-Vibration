@@ -97,7 +97,7 @@ td.v{text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-n
         font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre-wrap}
 :root{color-scheme:dark}
 :root{--muted2:#7c7c7c;--in-bg:#151515;--btn-bg:#252525;--btn-active:#2e2e2e;--seg-bg:#191919;--on-bg:#2a3a38;--mode-bg:#1a1a1a;--code-bg:#1c1c1c;--tip-bg:rgba(18,18,18,.93);--tip-line:#444;--plot-bg:#0b0b0b;--p-grid:#262626;--p-grid2:#313131;--p-txt:#9e9e9e;--p-lbl:#6f6f6f;--p-set:#8a8a8a;--p-exp:#80cbc4;--p-ext:#ffb74d;--p-xo:#ce93d8;--p-floor:#ef9a9a;--p-nyq:#e0e0e0;--p-x:#80cbc4;--p-y:#ffb74d;--p-axis:#555;--p-shade:rgba(255,255,255,0.045);--p-vline:#777;--p-hline:#444}
-:root[data-theme="light"]{color-scheme:light;--bg:#f4f6f7;--panel:#ffffff;--accent:#00796b;--fg:#1b1f23;--dim:#66727d;--line:#d0d5da;--ok:#1a7f37;--bad:#cf222e;--diff:#bc4c00;--vio:#8250df;--muted2:#6a737c;--in-bg:#ffffff;--btn-bg:#eef1f3;--btn-active:#e2e6e9;--seg-bg:#eef1f3;--on-bg:#d8efec;--mode-bg:#f0f3f5;--code-bg:#e8ecef;--tip-bg:rgba(255,255,255,.96);--tip-line:#c3c9cf;--plot-bg:#ffffff;--p-grid:#e6e9ec;--p-grid2:#d3d8dd;--p-txt:#4a5560;--p-lbl:#66727d;--p-set:#66727d;--p-exp:#00796b;--p-ext:#bc4c00;--p-xo:#8250df;--p-floor:#cf222e;--p-nyq:#1b1f23;--p-x:#00796b;--p-y:#bc4c00;--p-axis:#9aa3ab;--p-shade:rgba(0,0,0,0.05);--p-vline:#8a949d;--p-hline:#c3c9cf}
+:root[data-theme="light"]{color-scheme:light;--stage:#ffffff;--bg:#f4f6f7;--panel:#ffffff;--accent:#00796b;--fg:#1b1f23;--dim:#66727d;--line:#d0d5da;--ok:#1a7f37;--bad:#cf222e;--diff:#bc4c00;--vio:#8250df;--muted2:#6a737c;--in-bg:#ffffff;--btn-bg:#eef1f3;--btn-active:#e2e6e9;--seg-bg:#eef1f3;--on-bg:#d8efec;--mode-bg:#f0f3f5;--code-bg:#e8ecef;--tip-bg:rgba(255,255,255,.96);--tip-line:#c3c9cf;--plot-bg:#ffffff;--p-grid:#e6e9ec;--p-grid2:#d3d8dd;--p-txt:#4a5560;--p-lbl:#66727d;--p-set:#66727d;--p-exp:#00796b;--p-ext:#bc4c00;--p-xo:#8250df;--p-floor:#cf222e;--p-nyq:#1b1f23;--p-x:#00796b;--p-y:#bc4c00;--p-axis:#9aa3ab;--p-shade:rgba(0,0,0,0.05);--p-vline:#8a949d;--p-hline:#c3c9cf}
 .theme-toggle{position:absolute;top:10px;right:14px;width:32px;height:32px;padding:0;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer;font-size:16px;line-height:1;z-index:50}
 .theme-toggle:hover{border-color:var(--accent)}
 .home-link{padding-right:46px}   /* keep the nav line clear of the theme button */
@@ -1184,6 +1184,8 @@ function readPlotColors() {
   C.exp = Object.assign(new String(v('--p-exp')), {dash: true}); C.floor = Object.assign(new String(v('--p-floor')), {dash: true});
 }
 readPlotColors();
+const isLight = () => document.documentElement.getAttribute('data-theme') === 'light';
+const stageColor = () => getComputedStyle(document.documentElement).getPropertyValue('--stage').trim();
 
 function fitCanvas(cv) {
   const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1208,25 +1210,30 @@ const LUT = (() => {
   return lut;
 })();
 
+const LUT_R = (() => { const r = new Uint8ClampedArray(256*3);   // inferno reversed, for the light theme
+  for (let i = 0; i < 256; i++) for (let k = 0; k < 3; k++) r[i*3 + k] = LUT[(255 - i)*3 + k];
+  return r; })();
 let imgView = null;
 function drawImage() {
   const cv = $('imgCv'), g = fitCanvas(cv), ctx = cv.getContext('2d');
-  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, g.w, g.h);
+  ctx.fillStyle = stageColor(); ctx.fillRect(0, 0, g.w, g.h);
   if (!last) return;
+  const light = isLight();
   const N = last.N, M = last.M, src = ui.imgMode === 'avg' ? last.imgAvg : last.img0;
   const [lo, hi] = pct(src, [0.005, 0.995], Math.max(1, Math.floor(src.length/40000)));
   const off = document.createElement('canvas'); off.width = M; off.height = N;
   const oc = off.getContext('2d'), id = oc.createImageData(M, N), d = id.data, sc = 255/Math.max(1e-12, hi - lo);
   for (let i = 0; i < N*M; i++) {
     const v = Math.max(0, Math.min(255, (src[i] - lo)*sc));
-    d[4*i] = d[4*i + 1] = d[4*i + 2] = v; d[4*i + 3] = 255;
+    const w = light ? 255 - v : v;
+    d[4*i] = d[4*i + 1] = d[4*i + 2] = w; d[4*i + 3] = 255;
   }
   oc.putImageData(id, 0, 0);
   ctx.imageSmoothingEnabled = M > g.w;
   ctx.drawImage(off, 0, 0, g.w, g.h);
   // scale bar
   const fov = last.pxPm*M/1000, bar = fov > 12 ? 5 : fov > 5 ? 2 : fov > 2 ? 1 : 0.5, px = bar/fov*g.w;
-  ctx.fillStyle = '#fff'; ctx.fillRect(12*g.dpr, g.h - 18*g.dpr, px, 4*g.dpr);
+  ctx.fillStyle = light ? '#1b1f23' : '#fff'; ctx.fillRect(12*g.dpr, g.h - 18*g.dpr, px, 4*g.dpr);
   ctx.font = (11*g.dpr) + 'px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'bottom';
   ctx.fillText(bar + ' nm', 12*g.dpr, g.h - 22*g.dpr);
   $('imgAside').textContent = M + '² px · ' + fov.toFixed(2) + ' nm · ' + (ui.imgMode === 'avg' ? last.nFrames + ' frames averaged' : 'frame 1 of ' + last.nFrames);
@@ -1235,8 +1242,9 @@ function drawImage() {
 let fftView = null;
 function drawFFT() {
   const cv = $('fftCv'), g = fitCanvas(cv), ctx = cv.getContext('2d');
-  ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, g.w, g.h);
+  ctx.fillStyle = stageColor(); ctx.fillRect(0, 0, g.w, g.h);
   if (!last) return;
+  const lut = isLight() ? LUT_R : LUT;
   const N = last.N, M = last.M, z = ui.zoom, hN = Math.max(8, Math.round(N/(2*z))), hM = Math.max(8, Math.round(M/(2*z)));
   const r0 = N/2 - hN, c0 = M/2 - hM, nr = 2*hN, nc = 2*hM;
   const crop = new Float32Array(nr*nc);
@@ -1246,7 +1254,7 @@ function drawFFT() {
   const oc = off.getContext('2d'), id = oc.createImageData(nc, nr), d = id.data, sc = 255/Math.max(1e-9, hi - lo);
   for (let i = 0; i < nr*nc; i++) {
     const v = Math.max(0, Math.min(255, Math.round((crop[i] - lo)*sc)));
-    d[4*i] = LUT[3*v]; d[4*i + 1] = LUT[3*v + 1]; d[4*i + 2] = LUT[3*v + 2]; d[4*i + 3] = 255;
+    d[4*i] = lut[3*v]; d[4*i + 1] = lut[3*v + 1]; d[4*i + 2] = lut[3*v + 2]; d[4*i + 3] = 255;
   }
   oc.putImageData(id, 0, 0);
   ctx.imageSmoothingEnabled = false;
@@ -1257,11 +1265,11 @@ function drawFFT() {
   ctx.lineWidth = 1*g.dpr;
   last.gs.forEach(gg => {
     const [x, y] = toC(gg.kx, gg.ky);
-    ctx.strokeStyle = 'rgba(128,203,196,0.28)'; ctx.setLineDash([3*g.dpr, 4*g.dpr]);
+    ctx.strokeStyle = isLight() ? 'rgba(0,121,107,0.5)' : 'rgba(128,203,196,0.28)'; ctx.setLineDash([3*g.dpr, 4*g.dpr]);
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, g.h); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = '#80cbc4'; ctx.lineWidth = 1.4*g.dpr;
+    ctx.strokeStyle = isLight() ? '#00796b' : '#80cbc4'; ctx.lineWidth = 1.4*g.dpr;
     ctx.beginPath(); ctx.arc(x, y, Math.max(6*g.dpr, 2.2*bx), 0, 2*Math.PI); ctx.stroke();
-    ctx.fillStyle = '#80cbc4'; ctx.font = (10.5*g.dpr) + 'px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = isLight() ? '#00796b' : '#80cbc4'; ctx.font = (10.5*g.dpr) + 'px ui-monospace,Consolas,monospace'; ctx.textBaseline = 'bottom';
     ctx.fillText('(' + gg.h + ' ' + gg.k + ')', x + 7*g.dpr, y - 5*g.dpr);
   });
   $('fftAside').textContent = 'log scale · ' + last.nFrames + ' frame' + (last.nFrames > 1 ? 's' : '') + ' averaged';
@@ -1622,7 +1630,7 @@ try {
     const ro = new ResizeObserver(() => { if (last) { drawImage(); drawFFT(); drawPlot(); } });
     ['imgFig', 'fftFig', 'plotBox'].forEach(id => ro.observe($(id)));
   }
-  window.addEventListener('themechange', () => { readPlotColors(); buildPlotOpts(); drawPlot(); });
+  window.addEventListener('themechange', () => { readPlotColors(); buildPlotOpts(); drawImage(); drawFFT(); drawPlot(); });
   window.__sim = {SimCore: SimCore, params: () => clone(P), last: () => last, workerOK: () => workerOK};
   if (location.search.indexOf('selftest') >= 0) setTimeout(selftest, 50);
   run();
