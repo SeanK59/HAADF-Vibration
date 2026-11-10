@@ -32,7 +32,12 @@ header .sub{color:var(--dim);font-size:12.5px;margin-top:2px}
 .fig{position:relative;background:var(--stage);border:1px solid var(--line);border-radius:6px;
      aspect-ratio:1/1;overflow:hidden}
 .fig canvas,.plotbox canvas{position:absolute;left:0;top:0;width:100%;height:100%}
-.plotbox{position:relative;height:390px;background:var(--plot-bg);border:1px solid var(--line);border-radius:6px}
+/* square, like the micrograph and FFT above, so the two rows line up column for column */
+.plotbox{position:relative;aspect-ratio:1/1;background:var(--plot-bg);border:1px solid var(--line);border-radius:6px}
+.mainpanels > .pair + .pair{margin-top:12px}
+.cap table.ax{width:auto;margin-top:5px;font-size:11.5px}
+.cap table.ax td,.cap table.ax th{padding:0 0 0 14px;text-align:right}
+.cap table.ax td:first-child,.cap table.ax th:first-child{padding-left:0}
 .tip{position:absolute;pointer-events:none;background:var(--tip-bg);border:1px solid var(--tip-line);border-radius:4px;
      padding:4px 7px;font:11.5px/1.45 ui-monospace,Consolas,monospace;display:none;white-space:pre;z-index:5}
 .cap{color:var(--muted2);font-size:11.5px;margin-top:6px;line-height:1.45}
@@ -141,12 +146,20 @@ td.v{text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-n
       </div>
     </div>
 
-    <div class="panel">
-      <h2>Vibration <span class="aside" id="status"></span></h2>
-      <div class="tabs" id="plotTabs"></div>
-      <div class="plotbox" id="plotBox"><canvas id="plotCv"></canvas><div class="tip" id="plotTip"></div></div>
-      <div class="plotopts" id="plotOpts"></div>
-      <div class="cap" id="plotCap"></div>
+    <div class="pair">
+      <div class="panel">
+        <h2>Vibration <span class="aside" id="status"></span></h2>
+        <div class="tabs" id="plotTabs"></div>
+        <div class="plotbox" id="plotBox"><canvas id="plotCv"></canvas><div class="tip" id="plotTip"></div></div>
+        <div class="plotopts" id="plotOpts"></div>
+        <div class="cap" id="plotCap"></div>
+      </div>
+      <div class="panel">
+        <h2>Direction <span class="aside" id="polarAside"></span></h2>
+        <div class="tabs" id="polarTabs"></div>
+        <div class="plotbox" id="polarBox"><canvas id="polarCv"></canvas><div class="tip" id="polarTip"></div></div>
+        <div class="cap" id="polarCap"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -221,6 +234,24 @@ td.v{text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-n
     reflections in &ge; 3 directions are fitted for x and y together and reported as &radic;(x&sup2;+y&sup2;);
     the correction for each row&rsquo;s Hann-weighted time average; power averaged over frames; then
     <code>reduce_spectrum</code> for the floor, bands and peaks.</p>
+  <p>As in the tutorial notebook (<code>haadf_noise_spectrum_tutorial</code>, steps 5b and 11b): a peak sharing a column
+    being read is flagged as lattice cross-talk only when it indexes, on the primitive basis of the lattice, to whole
+    numbers other than the reflection&rsquo;s own; strong satellites of real motion index as g plus a fraction and are
+    not flagged. The <b>Direction</b> map takes the frame-averaged S<sub>xx</sub>, S<sub>yy</sub>, S<sub>xy</sub> of the
+    x+y fit and draws &radic;S(&theta;) for every direction and frequency; each peak&rsquo;s axis is the major
+    eigenvector of that 2&times;2 tensor at its bin.</p>
+  <p>Motion slower than one frame does not distort a frame; it moves it (notebook step 12). Each frame&rsquo;s position
+    comes from the phase of two reflections g<sub>1</sub>, g<sub>2</sub> (the primitive pair, else the two strongest):
+    shifting the image by <b>p</b> changes the phase at g by &minus;2&pi;g&middot;<b>p</b>. That phase moves with the
+    true g, not with its FFT bin, so each g is located between bins from its two neighbours (for a Hann-windowed
+    peak d bins past bin k, |F(k+1)|/|F(k)| = (1+d)/(2&minus;d)), and moved back by the shear that steady drift puts
+    on every frame, (g&middot;v)T<sub>frame</sub> bins along y, which the mean phase step itself gives. Built from the
+    bins instead, the rate reads high by |g|/|g<sub>bin</sub>|: 3% with 16 cells across the field. The wrapped phase steps from
+    frame to frame are converted to displacement steps and summed, which works while every step stays under half a
+    unit cell (at most 5% may not). That check rarely fires: a wrapped phase step always maps to a step of about half a cell or less, so drift faster than half a cell per frame aliases unseen; the readout gives that limit. With &ge; 8 frames a straight line fitted to x and y gives the steady drift in
+    pm/s, and the residual, Hann-windowed per axis, gives everything else from 1/T<sub>run</sub> up to half the frame
+    rate. Frames follow each other without a gap, as here. Between that and the first satellite bin,
+    3f<sub>line</sub>/N, nothing is measured.</p>
   <h3>The curves</h3>
   <p><b>set, per bin</b> is the Lorentzian spectrum you dialled in, integrated over each FFT bin and spread by the
     Hann window&rsquo;s [&frac14;, 1, &frac14;] power kernel &mdash; what an ideal satellite reading would show, drawn
@@ -451,17 +482,170 @@ function findReflections(P, N, M, n, rMin, rMax, sep) {
   }
   return out;
 }
-// haadf_vib._crosstalk_from_reflections(img, fs, gs)
+// notebook step 5b, primitive_basis: the shortest non-collinear pair (g1, g2) that indexes most of the
+// reflection weight with whole numbers. Returns [[g1x, g2x], [g1y, g2y]] or null.
+var MIN_BASIS_SINE = 0.25, IDX_TOL = 0.12;
+function solve2(B, v) {
+  var det = B[0][0]*B[1][1] - B[0][1]*B[1][0];
+  return [(v[0]*B[1][1] - B[0][1]*v[1])/det, (B[0][0]*v[1] - B[1][0]*v[0])/det];
+}
+function primitiveBasis(refl, tol, keep, need) {
+  tol = tol || IDX_TOL; keep = keep || 0.08; need = need || 0.80;
+  if (!refl.length) return null;
+  var strong = 0; refl.forEach(function (r) { strong = Math.max(strong, r[2]); });
+  var pts = refl.filter(function (r) { return r[2] >= keep*strong; });
+  var tot = 0; pts.forEach(function (p) { tot += p[2]; }); tot = tot || 1;
+  var best = null, bestLen = Infinity;
+  for (var i = 0; i < pts.length; i++) for (var j = i + 1; j < pts.length; j++) {
+    var g1 = pts[i], g2 = pts[j], B = [[g1[0], g2[0]], [g1[1], g2[1]]];
+    var det = B[0][0]*B[1][1] - B[0][1]*B[1][0];
+    if (Math.abs(det)/(Math.hypot(g1[0], g1[1])*Math.hypot(g2[0], g2[1])) < MIN_BASIS_SINE) continue;
+    var w = 0;
+    pts.forEach(function (p) {
+      var mn = solve2(B, [p[0], p[1]]);
+      if (Math.max(Math.abs(mn[0] - Math.round(mn[0])), Math.abs(mn[1] - Math.round(mn[1]))) <= tol) w += p[2];
+    });
+    if (w/tot < need) continue;
+    var len = Math.hypot(g1[0], g1[1]) + Math.hypot(g2[0], g2[1]);
+    if (len < bestLen) { best = B; bestLen = len; }
+  }
+  return best;
+}
+// notebook step 5b: a peak in a column being read is cross-talk only if it is another Bragg reflection --
+// indexes to whole numbers other than g's own -- not a satellite (g plus a fraction). With no basis, a peak
+// with no mirror partner at the opposite offset counts as a reflection.
 function crosstalkHz(gs, refl, N, M, fs) {
-  var out = {};
+  var out = {}, Bm = primitiveBasis(refl);
+  var whole = function (mn) { return Math.abs(mn[0] - Math.round(mn[0])) <= IDX_TOL && Math.abs(mn[1] - Math.round(mn[1])) <= IDX_TOL; };
   gs.forEach(function (g) {
     refl.forEach(function (r) {
-      if (Math.abs(r[0] - g[0])*M <= 1 && Math.abs(r[1] - g[1])*N >= 0.5) {
-        var v = Math.round(Math.abs(r[1] - g[1])*fs*1000)/1000; out[v] = true;
+      var off = (r[1] - g[1])*N;
+      if (Math.abs(r[0] - g[0])*M > 1 || Math.abs(off) < 0.5) return;
+      var real;
+      if (Bm) {
+        var mn = solve2(Bm, [r[0], r[1]]), mg = solve2(Bm, [g[0], g[1]]);
+        real = whole(mn) && (Math.round(mn[0]) !== Math.round(mg[0]) || Math.round(mn[1]) !== Math.round(mg[1]));
+      } else {
+        real = !refl.some(function (s) { return Math.abs(s[0] - g[0])*M <= 1 && Math.abs((s[1] - g[1])*N + off) <= 1; });
       }
+      if (real) out[Math.round(Math.abs(off)/N*fs*1000)/1000] = true;
     });
   });
   return Object.keys(out).map(Number).sort(function (a, b) { return a - b; });
+}
+// ---------------------------------------------------------------- notebook step 12: frame-to-frame drift
+// Where a Hann-windowed peak sits between bins, per axis. For one complex exponential d bins past bin k,
+// |X(k+1)|/|X(k)| = (1 + d)/(2 - d) exactly, so d = (2r - 1)/(1 + r), taken toward the larger neighbour.
+function hannOffset(a0, am, ap) {
+  var right = ap >= am, r = (right ? ap : am)/a0, d = Math.max(0, Math.min(0.5, (2*r - 1)/(1 + r)));
+  return right ? d : -d;
+}
+// First climb to the local maximum of |F|: the shortest indexing pair can be a leakage peak a bin or two off
+// the reflection (find_reflections keeps peaks 1.5 bins apart). Returns the located g and the bin it climbed to.
+function refineG(P, N, M, g) {
+  var kx = Math.round(g[0]*M), ky = Math.round(g[1]*N), at = function (a, b) { return P[mod(b, N)*M + mod(a, M)]; };
+  for (var it = 0; it < 8; it++) {
+    var bx = kx, by = ky;
+    for (var dj = -1; dj <= 1; dj++) for (var di = -1; di <= 1; di++) if (at(kx + di, ky + dj) > at(bx, by)) { bx = kx + di; by = ky + dj; }
+    if (bx === kx && by === ky) break;
+    kx = bx; ky = by;
+  }
+  var a0 = at(kx, ky), dx = hannOffset(a0, at(kx - 1, ky), at(kx + 1, ky)), dy = hannOffset(a0, at(kx, ky - 1), at(kx, ky + 1));
+  return {g: [(kx + dx)/M, (ky + dy)/N], bin: mod(ky, N)*M + mod(kx, M)};
+}
+// The ruler g1, g2: the primitive basis of step 5b, else the two strongest peaks, located between bins
+// (refineG). The phase is read at each one's FFT bin, but it moves with the true g: a ruler built from the bins
+// reads the rate high by |g|/|g_bin| (0.06% at 32 cells across the field, 3% at 16).
+function driftRuler(refl, P, N, M) {
+  var Bm = primitiveBasis(refl), g;
+  if (Bm) g = [[Bm[0][0], Bm[1][0]], [Bm[0][1], Bm[1][1]]];
+  else { g = detectGs(P, N, M).slice(0, 2); if (g.length < 2) return null; }
+  var loc = g.map(function (v) { return refineG(P, N, M, v); });
+  return {gApp: loc.map(function (l) { return l.g; }), bins: loc.map(function (l) { return l.bin; }), basis: !!Bm, M: M};
+}
+// phi = -G p, G = 2 pi [g1; g2] (cycles/px); returns G^-1 and the shortest real-space cell vector (columns of 2 pi G^-1)
+function rulerInverse(g) {
+  var G = [[2*Math.PI*g[0][0], 2*Math.PI*g[0][1]], [2*Math.PI*g[1][0], 2*Math.PI*g[1][1]]];
+  var det = G[0][0]*G[1][1] - G[0][1]*G[1][0];
+  if (Math.abs(det) < 1e-12) return null;
+  var Gi = [[G[1][1]/det, -G[0][1]/det], [-G[1][0]/det, G[0][0]/det]];
+  return {Gi: Gi, cellPx: Math.min(Math.hypot(2*Math.PI*Gi[0][0], 2*Math.PI*Gi[1][0]), Math.hypot(2*Math.PI*Gi[0][1], 2*Math.PI*Gi[1][1]))};
+}
+var DRIFT_MIN_FRAMES = 8, DRIFT_MAX_BAD = 0.05;
+// Wrapped phase steps -> displacement steps -> summed track; straight-line fit = steady drift (pm/s); the
+// residual, Hann-windowed, per axis, combined sqrt(x^2 + y^2) = everything else (per bin, a tone reads its amplitude).
+// Steady drift v also shears every frame: a pixel at row y, column x is recorded v (y t_line + x tau) later, so
+// a reflection appears at g - (g.v)(tau, t_line) per px, i.e. (g.v) t_active and (g.v) T_frame bins off. The
+// same g.v gives the phase step per frame, -2 pi (g.v) T_frame, so the mean step puts g back where it belongs.
+function frameDrift(ph, ruler, fs, N, pxPm, fSat0, tA) {
+  var n = ph.length, fr = fs/N, out = {ok: false, n: n, frame_rate: fr, f_hi: fr/2, f_sat0: fSat0};
+  if (!ruler) { out.why = 'no pair of lattice reflections to measure the position with'; return out; }
+  out.basis = ruler.basis;
+  var d = [], k, j, mean = [0, 0];
+  for (k = 1; k < n; k++) {
+    var st = [0, 1].map(function (i) { var v = ph[k][i] - ph[k - 1][i]; return Math.atan2(Math.sin(v), Math.cos(v)); });  // wrap to (-pi, pi]
+    d.push(st); mean[0] += st[0]/(n - 1); mean[1] += st[1]/(n - 1);
+  }
+  var tFrame = N/fs, g = ruler.gApp.map(function (v, i) {
+    var c = n > 1 ? mean[i]/(2*Math.PI) : 0;            // = -(g.v) T_frame, cycles
+    return [v[0] - c*(tA/tFrame)/ruler.M, v[1] - c/N];
+  });
+  var inv = rulerInverse(g);
+  if (!inv) { out.why = 'the two reflections are parallel'; return out; }
+  out.cell_pm = inv.cellPx*pxPm;
+  out.max_rate = 0.5*out.cell_pm*fr;                  // pm/s: half a cell per frame; faster aliases unseen
+  var x = [0], y = [0], Gi = inv.Gi, nBad = 0;
+  for (k = 1; k < n; k++) {
+    var d1 = d[k - 1][0], d2 = d[k - 1][1];
+    var sx = -(Gi[0][0]*d1 + Gi[0][1]*d2), sy = -(Gi[1][0]*d1 + Gi[1][1]*d2);
+    x.push(x[k - 1] + sx); y.push(y[k - 1] + sy);
+    if (Math.hypot(sx, sy) > 0.5*inv.cellPx) nBad++;
+  }
+  out.bad = n > 1 ? nBad/(n - 1) : 0;
+  if (n < DRIFT_MIN_FRAMES) { out.why = 'needs at least ' + DRIFT_MIN_FRAMES + ' frames, this run has ' + n; return out; }
+  if (out.bad > DRIFT_MAX_BAD) {
+    out.why = (100*out.bad).toFixed(0) + '% of steps exceed half a unit cell (' + (0.5*out.cell_pm).toFixed(0) +
+              ' pm): the track cannot be unwrapped'; return out;
+  }
+  var t = []; for (k = 0; k < n; k++) t.push(k/fr);
+  var fit = function (v) {                              // np.polyfit(t, v, 1)
+    var tm = 0, vm = 0, stt = 0, stv = 0, j;
+    for (j = 0; j < n; j++) { tm += t[j]/n; vm += v[j]/n; }
+    for (j = 0; j < n; j++) { stt += (t[j] - tm)*(t[j] - tm); stv += (t[j] - tm)*(v[j] - vm); }
+    var sl = stv/stt; return {slope: sl, resid: v.map(function (vv, jj) { return vv - (vm + sl*(t[jj] - tm)); })};
+  };
+  var fx = fit(x), fy = fit(y), wn = hanning(n), sw = 0;
+  for (k = 0; k < n; k++) sw += wn[k];
+  var H = Math.floor(n/2), fd = [], ad = [], rs = 0, best = 0;
+  for (var q = 1; q <= H; q++) {                        // rfft bins, DC dropped
+    var a2 = 0;
+    [fx.resid, fy.resid].forEach(function (rv) {
+      var re = 0, im = 0;
+      for (var j = 0; j < n; j++) { var ang = -2*Math.PI*q*j/n; re += rv[j]*wn[j]*Math.cos(ang); im += rv[j]*wn[j]*Math.sin(ang); }
+      var m = 2*Math.hypot(re, im)/sw; a2 += m*m;
+    });
+    var amp = Math.sqrt(a2)*pxPm;
+    fd.push(q*fr/n); ad.push(amp); rs += amp*amp;
+    if (amp > ad[best]) best = ad.length - 1;
+  }
+  out.ok = true;
+  out.rate_x = fx.slope*pxPm; out.rate_y = fy.slope*pxPm;   // pm/s
+  out.drift_pm_s = Math.hypot(out.rate_x, out.rate_y);
+  out.dir_deg = Math.atan2(out.rate_y, out.rate_x)*180/Math.PI;
+  out.freq = fd; out.amp = ad; out.f_lo = fd[0]; out.rms_pm = Math.sqrt(rs/2);
+  out.peak_f = fd[best]; out.peak_pm = ad[best];
+  return out;
+}
+// notebook step 11b: each peak's principal axis, from the 2x2 tensor at its bin. Major/minor axis amplitudes
+// (pm per bin, 0-pk, like amp) and the major axis direction in degrees, 0..180, 0 = x, 90 = y (down).
+function lineAxes(sp, lines) {
+  if (!sp.sxx) return [];
+  return lines.map(function (l) {
+    var j = 0; for (var q = 1; q < sp.f.length; q++) if (Math.abs(sp.f[q] - l[0]) < Math.abs(sp.f[j] - l[0])) j = q;
+    var a = sp.sxx[j], c = sp.syy[j], b = sp.sxy[j], h = 0.5*(a + c), d = Math.hypot(0.5*(a - c), b);
+    return {f: l[0], along: Math.sqrt(Math.max(h + d, 0)), across: Math.sqrt(Math.max(h - d, 0)),
+            ang: mod(0.5*Math.atan2(2*b, a - c)*180/Math.PI, 180)};
+  });
 }
 
 // ---------------------------------------------------------------- vibration._sideband_power
@@ -606,6 +790,11 @@ SpecAcc.prototype.result = function (pxPm) {
       cxy[q] = sxy*pxPm*pxPm;
     }
     out.motion = 'x+y'; out.amp = amp; out.amp_x = ax; out.amp_y = ay; out.cov_xy = cxy;
+    // the frame-averaged tensor itself, pm^2 and unclipped, for the motion along any direction
+    var p2 = pxPm*pxPm;
+    out.sxx = this.accS[0].map(function (v) { return v/n*p2; });
+    out.syy = this.accS[1].map(function (v) { return v/n*p2; });
+    out.sxy = this.accS[2].map(function (v) { return v/n*p2; });
   } else {
     out.motion = 'x only'; out.amp = ampXO; out.amp_x = ampXO; out.amp_y = null; out.cov_xy = null;
   }
@@ -791,7 +980,7 @@ function simulate(p, progress, opts) {
   var img = new Float64Array(N*M), img0 = new Float32Array(N*M), imgAvg = new Float32Array(N*M);
   var pw = new Float64Array(N*M);
   var stride = Math.max(1, Math.floor(N*M/6000)), trT = [], trX = [], trY = [];
-  var gs = null, acc = null, refl = null, P0 = null, frames = opts.keepFrames ? [] : null;
+  var gs = null, acc = null, refl = null, P0 = null, frames = opts.keepFrames ? [] : null, ruler = null, rulerPh = [];
   var tGen = 0, tAna = 0;
 
   for (var fr = 0; fr < nFr; fr++) {
@@ -829,7 +1018,10 @@ function simulate(p, progress, opts) {
       acc = new SpecAcc(N, M, gs, fs, tA);
       P0 = P;
       for (var q0 = 0; q0 < N*M; q0++) img0[q0] = img[q0];
+      ruler = driftRuler(refl, P, N, M);
     }
+    // notebook 12b: the phase of g1, g2 in this frame (work holds the windowed, mean-removed FFT)
+    if (ruler) rulerPh.push(ruler.bins.map(function (q) { return Math.atan2(work.im[q], work.re[q]); }));
     acc.add(P);
     for (var q1 = 0; q1 < N*M; q1++) { pw[q1] += P[q1]*P[q1]; imgAvg[q1] += img[q1]/nFr; }
     if (frames) frames.push(Float64Array.from(img));
@@ -864,8 +1056,10 @@ function simulate(p, progress, opts) {
     img0: img0, imgAvg: imgAvg, fftLog: fftLog,
     gs: gsInfo, motion: sp.motion, n_directions: sp.n_directions, y_cost: sp.y_cost,
     f: sp.f, amp: sp.amp, amp_x_only: sp.amp_x_only, amp_x: sp.amp_x, amp_y: sp.amp_y, cov_xy: sp.cov_xy,
+    sxx: sp.sxx || null, syy: sp.syy || null, sxy: sp.sxy || null, axes: lineAxes(sp, red.lines),
     floor_pm: sp.floor_pm, floor_x_only_pm: sp.floor_x_only_pm,
     reduce: red, vel: vel, crosstalk: crosstalkHz(gs, refl, N, M, fs),
+    drift: frameDrift(rulerPh, ruler, fs, N, pxPm, sp.f[0], tA),
     set: set,
     trace: {t: Float32Array.from(trT), x: Float32Array.from(trX), y: Float32Array.from(trY)},
     frames: frames,
@@ -882,7 +1076,8 @@ return {DEFAULTS: DEFAULTS, BANDS: BANDS, LINE_MIN_PROM: LINE_MIN_PROM, Y_COST_W
         simulate: simulate, transferList: transferList, aliasCandidates: aliasCandidates,
         fft1: fft1, fftPlan: fftPlan, besselJ: besselJ, invertBesselRatio: invertBesselRatio,
         makeProcesses: makeProcesses, bandPower: bandPower, hannResp: hannResp, hannRespD: hannRespD, sinc: sinc,
-        nDirections: nDirections, hanning: hanning};
+        nDirections: nDirections, hanning: hanning, primitiveBasis: primitiveBasis, crosstalkHz: crosstalkHz,
+        DRIFT_MIN_FRAMES: DRIFT_MIN_FRAMES};
 })();
 </script>
 
@@ -931,7 +1126,7 @@ function saveState() {
   try { history.replaceState(null, '', location.pathname + location.search + '#' + encodeURIComponent(JSON.stringify(P))); }
   catch (e) { /* file:// in some browsers */ }
 }
-const ui = {imgMode: 'frame', zoom: 2, tab: 'spec', showXO: false, showExp: true, showFloor: true, linF: true};
+const ui = {imgMode: 'frame', zoom: 2, tab: 'spec', showXO: false, showExp: true, showFloor: true, linF: true, polarLog: true};
 
 /* ================================================================
    2.  Controls
@@ -1028,6 +1223,7 @@ function buildControls() {
   seg($('imgSeg'), [['frame', 'frame 1'], ['avg', 'frame average']], () => ui.imgMode, v => { ui.imgMode = v; drawImage(); });
   seg($('zoomSeg'), [[1, 'full'], [2, '×2'], [4, '×4'], [8, '×8']], () => ui.zoom, v => { ui.zoom = v; drawFFT(); });
   seg($('plotTabs'), [['spec', 'spectrum'], ['time', 'time trace']], () => ui.tab, v => { ui.tab = v; buildPlotOpts(); drawPlot(); });
+  seg($('polarTabs'), [[true, 'radius: log f'], [false, 'radius: linear f']], () => ui.polarLog, v => { ui.polarLog = v; drawPolar(); });
   buildPlotOpts();
 
   const sc = $('scenarios'); sc.innerHTML = '';
@@ -1114,6 +1310,8 @@ const SCENARIOS = [
    p: {rot_deg: 0}},
   {name: 'broadband + mains', note: 'An isotropic 8 Hz floor resonance 6 Hz wide plus a narrow 50 Hz line along x.',
    p: {modes: [{on: true, f: 8, w: 6, a: 15, dir: 0, iso: true}, {on: true, f: 50, w: 0.2, a: 8, dir: 0, iso: false}], frames: 8}},
+  {name: 'drift, 16 frames', note: '50 pm/s of drift at 120&deg; over 16 frames: the readout&rsquo;s <i>slower than one frame</i> group tracks the lattice phase frame to frame and recovers the rate and direction.',
+   p: {drift_speed: 50, drift_dir: 120, frames: 16}},
   {name: 'fast drift', note: '2 nm/s of drift: the lattice shears within each frame, the Bragg reflections move, and low-frequency leakage rises.',
    p: {modes: [{on: true, f: 40, w: 2, a: 10, dir: 30, iso: false}], drift_speed: 2000, drift_dir: 60}}
 ];
@@ -1161,7 +1359,7 @@ function showError(e) { setStatus('error', false); $('warnings').innerHTML = '<d
 function show(res) {
   last = res;
   setStatus(res.timing.total.toFixed(0) + ' ms', false);
-  drawImage(); drawFFT(); drawPlot(); drawReadout();
+  drawImage(); drawFFT(); drawPlot(); drawPolar(); drawReadout();
 }
 function updateDerived() {
   const M = P.npx, tLine = M*P.dwell_us + P.flyback_us, fs = 1e6/tLine;
@@ -1407,6 +1605,139 @@ function drawTrace() {
     (r.tLine*1e3).toFixed(3) + ' ms, of which ' + (r.tActive*1e3).toFixed(3) + ' ms records pixels.';
 }
 
+/* ---- direction map (notebook step 11b) ----
+   S(theta) = Sxx cos^2 + Syy sin^2 + 2 Sxy sin cos at every frequency; sqrt(S) is the 0-pk displacement per bin
+   along theta. Angle as in the image (0 = x right, 90 = y down, so clockwise), radius = frequency, colour = log. */
+const POLAR_NA = 180;                                  // 2 deg direction bins
+let polarView = null;
+function polarTable(r) {
+  const f = r.f, K = f.length, A = new Float32Array(K*POLAR_NA);
+  for (let a = 0; a < POLAR_NA; a++) {
+    const t = (a + 0.5)*2*Math.PI/POLAR_NA, c = Math.cos(t), s = Math.sin(t);
+    for (let k = 0; k < K; k++) A[k*POLAR_NA + a] = Math.sqrt(Math.max(r.sxx[k]*c*c + r.syy[k]*s*s + 2*r.sxy[k]*s*c, 0));
+  }
+  return A;
+}
+function drawPolar() {
+  const cv = $('polarCv'), g = fitCanvas(cv), ctx = cv.getContext('2d'), d = g.dpr;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, g.w, g.h);
+  polarView = null;
+  if (!last) return;
+  const r = last, light = isLight();
+  ctx.font = (11*d) + 'px ui-monospace,Consolas,monospace';
+  if (!r.sxx) {
+    $('polarAside').textContent = 'x only';
+    ctx.fillStyle = C.txt; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('fewer than 3 reflection directions:', g.w/2, g.h/2 - 9*d);
+    ctx.fillText('the direction cannot be resolved', g.w/2, g.h/2 + 9*d);
+    ctx.textAlign = 'left';
+    $('polarCap').innerHTML = 'The direction needs reflections in at least 3 directions; these point ' + r.n_directions +
+      ' way' + (r.n_directions === 1 ? '' : 's') + ', so only x is read.';
+    return;
+  }
+  $('polarAside').textContent = r.nFrames + ' frame' + (r.nFrames > 1 ? 's' : '') + ' averaged';
+  const f = r.f, K = f.length, lg = ui.polarLog;
+  // radius coordinate (log10 f or f) with edges halfway between bins, as the notebook's pcolormesh
+  const u = Array.from(f, v => lg ? log10(v) : v), e = new Float64Array(K + 1);
+  e[0] = 1.5*u[0] - 0.5*u[1]; e[K] = 1.5*u[K - 1] - 0.5*u[K - 2];
+  for (let k = 1; k < K; k++) e[k] = 0.5*(u[k] + u[k - 1]);
+  const r0 = lg ? e[0] : 0, rMax = e[K] - r0;
+  const A = polarTable(r);
+  // colour scale: LogNorm(max(5th percentile, 1e-3), max)
+  const [p5] = pct(A, [0.05], Math.max(1, Math.floor(A.length/40000)));
+  let amax = 0; for (let i = 0; i < A.length; i++) if (A[i] > amax) amax = A[i];
+  const lo = Math.max(p5, 1e-3), hi = Math.max(amax, lo*10), llo = log10(lo), lsp = log10(hi) - llo;
+  const lut = light ? LUT_R : LUT;
+  // geometry: disc on the left, colour bar on the right
+  const cbW = 58*d, pad = 34*d, R = Math.max(10, Math.min((g.w - cbW)/2 - pad, g.h/2 - pad));
+  const cx = Math.round((g.w - cbW)/2), cy = Math.round(g.h/2);
+  const S = Math.ceil(2*R) + 2, off = document.createElement('canvas'); off.width = S; off.height = S;
+  const oc = off.getContext('2d'), id = oc.createImageData(S, S), px = id.data, h0 = S/2;
+  for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++) {
+    const dx = xx + 0.5 - h0, dy = yy + 0.5 - h0, rr = Math.hypot(dx, dy)/R*rMax + r0;
+    if (rr < e[0] || rr >= e[K]) continue;
+    let a0 = 0, a1 = K;                                 // e[a0] <= rr < e[a0 + 1]
+    while (a1 - a0 > 1) { const m = (a0 + a1) >> 1; if (e[m] <= rr) a0 = m; else a1 = m; }
+    let t = Math.atan2(dy, dx); if (t < 0) t += 2*Math.PI;   // y down: clockwise from +x
+    const ab = Math.min(POLAR_NA - 1, Math.floor(t/(2*Math.PI)*POLAR_NA)), v = A[a0*POLAR_NA + ab];
+    const c = v > 0 ? Math.max(0, Math.min(255, Math.round((log10(v) - llo)/lsp*255))) : 0, q = 4*(yy*S + xx);
+    px[q] = lut[3*c]; px[q + 1] = lut[3*c + 1]; px[q + 2] = lut[3*c + 2]; px[q + 3] = 255;
+  }
+  oc.putImageData(id, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, cx - h0, cy - h0);
+  const rad = v => ((lg ? log10(v) : v) - r0)/rMax*R;
+  // grid: frequency rings and 45-degree spokes
+  const gridC = light ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.28)';
+  const rt = lg ? [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].filter(t => t >= Math.pow(10, e[0]) && t <= f[K - 1])
+                : niceLin(0, f[K - 1], 4).filter(t => t > 0 && t <= f[K - 1]);
+  ctx.strokeStyle = gridC; ctx.lineWidth = 1*d;
+  rt.forEach(t => { ctx.beginPath(); ctx.arc(cx, cy, rad(t), 0, 2*Math.PI); ctx.stroke(); });
+  for (let a = 0; a < 360; a += 45) {
+    const t = a*Math.PI/180; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R*Math.cos(t), cy + R*Math.sin(t)); ctx.stroke();
+  }
+  ctx.strokeStyle = C.axis; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2*Math.PI); ctx.stroke();
+  // angle labels outside the disc
+  ctx.fillStyle = C.txt; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ['0° x', '45°', '90° y', '135°', '180°', '225°', '270°', '315°'].forEach((s, i) => {
+    const t = i*Math.PI/4, rl = R + 17*d;
+    ctx.fillText(s, cx + rl*Math.cos(t), cy + rl*Math.sin(t));
+  });
+  // ring labels along the 290 deg spoke, haloed
+  const tl = 290*Math.PI/180;
+  ctx.lineWidth = 3*d; ctx.strokeStyle = light ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)';
+  ctx.fillStyle = light ? '#1b1f23' : '#e0e0e0';
+  rt.forEach(t => {
+    const x = cx + rad(t)*Math.cos(tl), y = cy + rad(t)*Math.sin(tl), s = fmtTick(t) + ' Hz';
+    ctx.strokeText(s, x, y); ctx.fillText(s, x, y);
+  });
+  // each peak on its axis of largest motion, both ends
+  ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 1.5*d;
+  r.axes.forEach(ax => {
+    const rr = rad(ax.f), t = ax.ang*Math.PI/180;
+    [t, t + Math.PI].forEach(tt => { ctx.beginPath(); ctx.arc(cx + rr*Math.cos(tt), cy + rr*Math.sin(tt), 6*d, 0, 2*Math.PI); ctx.stroke(); });
+  });
+  // colour bar, log
+  const bx = g.w - cbW + 6*d, bw = 10*d, by0 = cy - R, bh = 2*R;
+  for (let i = 0; i < bh; i++) {
+    const c = Math.round((1 - i/bh)*255);
+    ctx.fillStyle = 'rgb(' + lut[3*c] + ',' + lut[3*c + 1] + ',' + lut[3*c + 2] + ')'; ctx.fillRect(bx, by0 + i, bw, 1.5);
+  }
+  ctx.strokeStyle = C.axis; ctx.lineWidth = 1*d; ctx.strokeRect(bx, by0, bw, bh);
+  const few = hi/lo < 40, cbt = [];
+  for (let ex = Math.floor(llo) - 1; ex <= Math.ceil(log10(hi)); ex++) [1, 2, 5].forEach(m => {
+    const v = m*Math.pow(10, ex); if ((m === 1 || few) && v >= lo*0.999 && v <= hi*1.001) cbt.push(v);
+  });
+  ctx.fillStyle = C.txt; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  cbt.forEach(v => { const y = by0 + bh - (log10(v) - llo)/lsp*bh; ctx.fillRect(bx + bw, y, 3*d, 1*d); ctx.fillText(fmtTick(v), bx + bw + 5*d, y); });
+  ctx.textBaseline = 'bottom'; ctx.fillText('pm', bx, by0 - 5*d);
+  polarView = {cx, cy, R, rMax, r0, e, K, A, d, lg};
+  // caption: what is drawn, and each peak's axis
+  const rows = r.axes.map(a => '<tr><td>' + a.f.toFixed(2) + '</td><td>' + a.along.toFixed(2) + '</td><td>' + a.across.toFixed(2) +
+    '</td><td>' + a.ang.toFixed(0) + '&deg;</td></tr>').join('');
+  $('polarCap').innerHTML = 'Displacement along each direction &theta;, &radic;S(&theta;) with S(&theta;) = S<sub>xx</sub>cos&sup2;&theta; + S<sub>yy</sub>sin&sup2;&theta; + ' +
+    '2S<sub>xy</sub>sin&theta;cos&theta; from the x+y fit (pm per bin, 0-pk, the spectrum&rsquo;s axis). Angle as in the image, clockwise; ' +
+    'direction is defined mod 180&deg;, so the map is point-symmetric. The floor shows as a ring at every frequency, lower where the ' +
+    'reflections pin the direction down well: a dark sector alone is not less vibration.' +
+    (rows ? ' <span style="color:#22d3ee">Circles</span>: each peak on its axis of largest motion.' +
+      '<table class="ax"><tr><th>peak Hz</th><th>along (pm)</th><th>across (pm)</th><th>axis</th></tr>' + rows + '</table>' : '');
+}
+$('polarBox').addEventListener('mousemove', ev => {
+  const v = polarView; if (!v || !last) return;
+  const b = $('polarCv').getBoundingClientRect(), x = (ev.clientX - b.left)*v.d - v.cx, y = (ev.clientY - b.top)*v.d - v.cy;
+  const rr = Math.hypot(x, y)/v.R*v.rMax + v.r0;
+  if (rr < v.e[0] || rr >= v.e[v.K]) return tipAt($('polarTip'), $('polarBox'), ev, null);
+  let a0 = 0, a1 = v.K; while (a1 - a0 > 1) { const m = (a0 + a1) >> 1; if (v.e[m] <= rr) a0 = m; else a1 = m; }
+  let t = Math.atan2(y, x); if (t < 0) t += 2*Math.PI;
+  const ab = Math.min(POLAR_NA - 1, Math.floor(t/(2*Math.PI)*POLAR_NA)), deg = t*180/Math.PI;
+  const sxx = last.sxx[a0], syy = last.syy[a0], sxy = last.sxy[a0], h = 0.5*(sxx + syy), dd = Math.hypot(0.5*(sxx - syy), sxy);
+  const axis = ((0.5*Math.atan2(2*sxy, sxx - syy)*180/Math.PI) % 180 + 180) % 180;
+  tipAt($('polarTip'), $('polarBox'), ev, 'f ' + last.f[a0].toFixed(2) + ' Hz   direction ' + (deg % 180).toFixed(0) + '°' +
+    '\nalong it  ' + v.A[a0*POLAR_NA + ab].toFixed(2) + ' pm' +
+    '\nthis bin: ' + Math.sqrt(Math.max(h + dd, 0)).toFixed(2) + ' pm along ' + axis.toFixed(0) + '°, ' + Math.sqrt(Math.max(h - dd, 0)).toFixed(2) + ' across');
+});
+$('polarBox').addEventListener('mouseleave', () => { $('polarTip').style.display = 'none'; });
+
 /* ---- hover tooltips ---- */
 function tipAt(tip, box, ev, text) {
   if (!text) { tip.style.display = 'none'; return; }
@@ -1507,7 +1838,26 @@ function drawReadout() {
       '</td><td class="v">' + (alts.map(c => c.toFixed(1)).join(', ') || '&ndash;') + (xt ? ' <span class="dp">x-talk?</span>' : '') + '</td></tr>';
   }).join('') : '<tr><td class="k">none above ' + SimCore.LINE_MIN_PROM + '&times; the floor</td></tr>';
   const g5 = '<div class="rgroup"><h3>Peaks</h3><table><tr><th>Hz</th><th>pm</th><th>&times;floor</th><th>could also be</th></tr>' + lines + '</table></div>';
-  $('readout').innerHTML = g1 + refl + g3 + g4 + g5;
+  // notebook step 12: below one frame, from the frame-to-frame lattice phase
+  const dr = r.drift, setDir = ((r.params.drift_dir % 360) + 540) % 360 - 180;
+  const gapTxt = dr.f_sat0 > dr.f_hi*1.05 ? fmt(dr.f_hi, 3) + '&ndash;' + fmt(dr.f_sat0, 2) + ' Hz' : 'none';
+  const drRows = dr.ok ? [
+    ['steady drift', fmt(dr.drift_pm_s) + ' pm/s at ' + fmt(dr.dir_deg, 0) + '&deg;'],
+    ['&emsp;set', fmt(r.params.drift_speed) + ' pm/s at ' + fmt(setDir, 0) + '&deg;'],
+    ['&emsp;x / y', (dr.rate_x >= 0 ? '+' : '') + fmt(dr.rate_x) + ' / ' + (dr.rate_y >= 0 ? '+' : '') + fmt(dr.rate_y) + ' pm/s'],
+    ['everything else, rms', fmt(dr.rms_pm) + ' pm'],
+    ['&emsp;largest bin', fmt(dr.peak_pm) + ' pm at ' + fmt(dr.peak_f, 3) + ' Hz'],
+    ['covers', fmt(dr.f_lo, 4) + '&ndash;' + fmt(dr.f_hi, 3) + ' Hz'],
+    ['measured by neither', gapTxt],
+    ['steps &gt; &frac12; cell', fmt(100*dr.bad, 1) + ' % of ' + (dr.n - 1)],
+    ['readable up to', fmt(dr.max_rate, 0) + ' pm/s']]
+  : [['not measured', '<span style="color:var(--muted2);white-space:normal">' + dr.why + '</span>'],
+     ['covers, with ' + SimCore.DRIFT_MIN_FRAMES + ' frames', fmt(dr.frame_rate/SimCore.DRIFT_MIN_FRAMES, 4) + '&ndash;' + fmt(dr.f_hi, 3) + ' Hz']];
+  const g6 = '<div class="rgroup"><h3>Slower than one frame</h3>' + tbl(drRows) +
+    '<div class="cap">Frame position from the phase of ' + (dr.basis ? 'the primitive pair' : 'the two strongest reflections') +
+    (dr.cell_pm ? ' (cell ' + dr.cell_pm.toFixed(0) + ' pm)' : '') + ', tracked frame to frame; a straight line gives the drift ' +
+    '(0&deg; = +x, 90&deg; = +y, down), the rest is Hann-windowed per axis. Frames are taken back to back. Faster than half a cell per frame aliases: the step check cannot see it.</div></div>';
+  $('readout').innerHTML = g1 + refl + g3 + g4 + g5 + g6;
 
   const w = [];
   if (r.motion !== 'x+y') {
@@ -1521,6 +1871,11 @@ function drawReadout() {
   if (r.crosstalk.length) {
     w.push('<div class="notice">Lattice cross-talk at ' + r.crosstalk.slice(0, 6).map(c => c.toFixed(2)).join(', ') +
       ' Hz &ndash; another reflection in a column being read shows up as a satellite there.</div>');
+  }
+  if (dr.ok && r.params.drift_speed > 0.9*dr.max_rate) {
+    w.push('<div class="warn">The drift you set, ' + fmt(r.params.drift_speed, 0) + ' pm/s, moves the lattice ' +
+      (r.params.drift_speed/dr.frame_rate/dr.cell_pm).toFixed(2) + ' cells per frame. Above half a cell (' + fmt(dr.max_rate, 0) +
+      ' pm/s) the frame-to-frame phase steps wrap to a smaller step, and the drift reads wrong with nothing in the data to show it.</div>');
   }
   $('warnings').innerHTML = w.join('');
 }
@@ -1613,6 +1968,27 @@ function selftest() {
     let shared = false; r15.gs.forEach((a, i) => r15.gs.forEach((b, j) => { if (i < j && Math.abs(a.kx - b.kx) <= 1) shared = true; }));
     chk2('no two reflections read share a column', !shared); }
 
+  // direction (notebook 11b): a tone along 30 deg reads its axis at 30 deg, with little across it;
+  // and its strong satellites are not taken for lattice cross-talk (notebook 5b)
+  { const k0 = 40, f = k0*df, r = run1([{on: true, f: f, w: 0, a: 20, dir: 30}]), i = at(r, f);
+    const h = 0.5*(r.sxx[i] + r.syy[i]), dd = Math.hypot(0.5*(r.sxx[i] - r.syy[i]), r.sxy[i]);
+    const ang = ((0.5*Math.atan2(2*r.sxy[i], r.sxx[i] - r.syy[i])*180/Math.PI) % 180 + 180) % 180;
+    const along = Math.sqrt(h + dd), across = Math.sqrt(Math.max(h - dd, 0));
+    chk2('direction: 30° tone reads its axis at 30°', Math.abs(ang - 30) < 2 && across < 0.1*along,
+         'axis ' + ang.toFixed(1) + '°, along ' + along.toFixed(2) + ' pm, across ' + across.toFixed(2) + ' pm');
+    chk2('direction: |along| = the x+y amplitude', Math.abs(along/r.amp[i] - 1) < 0.02, along.toFixed(2) + ' vs ' + r.amp[i].toFixed(2) + ' pm');
+    const fake = r.crosstalk.filter(c => Math.abs(c - f) <= 1.5*df);
+    chk2('satellites are not flagged as cross-talk', !fake.length, fake.length ? 'flagged ' + fake.join(', ') + ' Hz' : 'none at ' + f.toFixed(2) + ' Hz'); }
+
+  // frame-to-frame drift (notebook 12): 8 frames of 40 pm/s at 60 deg, no vibration -> the rate and direction.
+  // 256 px over 8 nm puts 16 cells across, the reflections well off their bins: a ruler built from the bins
+  // reads 3.1% high (41.23 pm/s) here; built from g located between bins it reads the set rate.
+  { const r = SimCore.simulate(Object.assign({}, base, {npx: 256, fov_nm: 8, frames: 8, modes: [], drift_speed: 40, drift_dir: 60}), null), d = r.drift;
+    chk2('drift: rate and direction from the lattice phase', d.ok && Math.abs(d.drift_pm_s/40 - 1) < 0.005 && Math.abs(d.dir_deg - 60) < 1,
+         d.ok ? d.drift_pm_s.toFixed(2) + ' pm/s at ' + d.dir_deg.toFixed(1) + '°, set 40 at 60°; residual ' + d.rms_pm.toFixed(2) + ' pm rms' : d.why);
+    const r1 = run1([]);
+    chk2('drift: one frame is not enough', !r1.drift.ok, r1.drift.why); }
+
   out.push('', (all ? 'ALL PASS' : 'SOME CHECKS FAILED') + '   (' + (performance.now() - t0).toFixed(0) + ' ms)');
   const bn = $('banner'); bn.style.display = 'block';
   bn.style.background = all ? '#1b2a1d' : '#2e1a1a'; bn.style.color = all ? 'var(--ok)' : 'var(--bad)';
@@ -1627,10 +2003,10 @@ try {
   buildControls(); updateDerived();
   $('noscriptMsg').style.display = 'none';
   if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => { if (last) { drawImage(); drawFFT(); drawPlot(); } });
-    ['imgFig', 'fftFig', 'plotBox'].forEach(id => ro.observe($(id)));
+    const ro = new ResizeObserver(() => { if (last) { drawImage(); drawFFT(); drawPlot(); drawPolar(); } });
+    ['imgFig', 'fftFig', 'plotBox', 'polarBox'].forEach(id => ro.observe($(id)));
   }
-  window.addEventListener('themechange', () => { readPlotColors(); buildPlotOpts(); drawImage(); drawFFT(); drawPlot(); });
+  window.addEventListener('themechange', () => { readPlotColors(); buildPlotOpts(); drawImage(); drawFFT(); drawPlot(); drawPolar(); });
   window.__sim = {SimCore: SimCore, params: () => clone(P), last: () => last, workerOK: () => workerOK};
   if (location.search.indexOf('selftest') >= 0) setTimeout(selftest, 50);
   run();
